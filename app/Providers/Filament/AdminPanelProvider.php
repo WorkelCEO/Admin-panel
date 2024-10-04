@@ -48,7 +48,8 @@ class AdminPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
-            ->authMiddleware([
+            ->brandLogo(logo: asset(path: 'images/logo.png'))
+            ->authMiddleware(middleware: [
                 Authenticate::class,
             ]);
     }
