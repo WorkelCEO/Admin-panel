@@ -69,7 +69,7 @@ class WorkelUser extends Model
 
 
         $all_users = $response->json();
-        dd($all_users);      
+        // dd($all_users);      
         foreach ($all_users as $user) {
             WorkelUser::updateOrCreate(
                 attributes: ['id' => $user['id']],
