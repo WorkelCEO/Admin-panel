@@ -9,9 +9,8 @@ use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class WorkelUserResource extends Resource
 {
@@ -48,7 +47,7 @@ class WorkelUserResource extends Resource
                 Forms\Components\Textarea::make('address')
                     ->label('Address')
                     ->placeholder('123 Main St, New York, NY 10001'),
-                Forms\Components\Select::make('role')   
+                Forms\Components\Select::make('role')
                     ->label('Role')
                     ->options([
                         'user' => 'User',
@@ -62,7 +61,7 @@ class WorkelUserResource extends Resource
                         'inactive' => 'Inactive',
                     ])
                     ->default('active'),
-                
+
             ]);
     }
 
@@ -82,6 +81,15 @@ class WorkelUserResource extends Resource
                 Tables\Columns\TextColumn::make('role')
                     ->searchable()
                     ->sortable(),
+                TextColumn::make('api_type')
+                    ->searchable()
+                    ->sortable()
+                    ->badge()
+                    ->color(fn(WorkelUser $record): string => match ($record->api_type) {
+                        'app' => 'success',
+                        'client' => 'danger',
+                        default => 'gray',
+                    }),
                 // Tables\Columns\TextColumn::make('status')
                 //     ->searchable()
                 //     ->sortable(),
@@ -115,9 +123,7 @@ class WorkelUserResource extends Resource
                 // Tables\Columns\TextColumn::make('subscription_payment_transaction_id')
                 //     ->searchable()
                 //     ->sortable(),
-                // Tables\Columns\TextColumn::make('subscription_payment_receipt')
-                //     ->searchable()
-                //     ->sortable(),
+
                 Tables\Columns\TextColumn::make('created_at')
                     ->searchable()
                     ->sortable(),
