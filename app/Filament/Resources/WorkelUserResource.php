@@ -82,42 +82,42 @@ class WorkelUserResource extends Resource
                 Tables\Columns\TextColumn::make('role')
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('status')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_type')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_start_date')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_end_date')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_status')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_payment_status')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_payment_method')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_payment_date')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_payment_amount')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_payment_currency')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_payment_transaction_id')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('subscription_payment_receipt')
-                    ->searchable()
-                    ->sortable(),
+                // Tables\Columns\TextColumn::make('status')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_type')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_start_date')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_end_date')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_status')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_payment_status')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_payment_method')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_payment_date')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_payment_amount')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_payment_currency')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_payment_transaction_id')
+                //     ->searchable()
+                //     ->sortable(),
+                // Tables\Columns\TextColumn::make('subscription_payment_receipt')
+                //     ->searchable()
+                //     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->searchable()
                     ->sortable(),
