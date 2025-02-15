@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::table('workel_users', function (Blueprint $table) {
             $table->string('api_type')->default('client')->after('subscription_payment_receipt');
+            $table->string('external_id')->nullable()->after('api_type');
         });
     }
 

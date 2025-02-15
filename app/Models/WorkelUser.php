@@ -34,6 +34,7 @@ class WorkelUser extends Model
         'created_at',
         'updated_at',
         'api_type',
+        'external_id',
     ];
 
 
@@ -62,69 +63,76 @@ class WorkelUser extends Model
     {
         parent::boot();
 
-        $responseClient = Http::withToken(env('API_APP_TOKEN'))
-            ->withHeaders(headers: [
-                'Accept' => 'application/json',
+        // Fetch and sync users from the App API
+        $responseApp = Http::withToken(env('API_APP_TOKEN'))
+            ->withHeaders([
+                'Accept'        => 'application/json',
                 'Custom-Header' => 'CustomValue'
             ])
             ->get(env("APP_WORKEL_API") . '/admin/users');
-            
-        if ($responseClient->successful()) {
-            $all_users = $responseClient->json();
-            if (!$all_users) {
-                Log::info('No users found in API');
+
+        if ($responseApp->successful()) {
+            $appUsers = $responseApp->json();
+            if (empty($appUsers)) {
+                Log::info('No users found in App API');
             }
-            foreach ($all_users as $user) {
+            foreach ($appUsers as $user) {
                 WorkelUser::updateOrCreate(
-                    attributes: ['id' => $user['id']],
-                    values: [
-                        'name' => $user['name'],
-                        'email' => $user['email'],
-                        'phone' => $user['phone'] ?? '',
-                        'address' => $user['address'] ?? '',
-                        'role' => $user['role'] ?? 'user',
-                        'password' => $user['password'] ?? '',
-                        'status' => $user['status'] ?? 'active',
+                    [
+                        'external_id' => $user['id'],
+                        'api_type'    => 'App'
+                    ],
+                    [
+                        'name'       => $user['name'],
+                        'email'      => $user['email'],
+                        'phone'      => $user['phone']   ?? '',
+                        'address'    => $user['address'] ?? '',
+                        'role'       => $user['role']    ?? 'user',
+                        'password'   => $user['password'] ?? '',
+                        'status'     => $user['status']  ?? 'active',
                         'created_at' => $user['created_at'],
                         'updated_at' => $user['updated_at'],
-                        'api_type' => 'client',
                     ]
                 );
             }
         } else {
-            Log::error('Failed to fetch users from API', ['response' => $responseClient->body()]);
+            Log::error('Failed to fetch users from App API', ['response' => $responseApp->body()]);
         }
-        $responseApp = Http::withToken(env('API_CLIENT_TOKEN'))
-            ->withHeaders(headers: [
-                'Accept' => 'application/json',
+
+        // Fetch and sync users from the Client API
+        $responseClient = Http::withToken(env('API_CLIENT_TOKEN'))
+            ->withHeaders([
+                'Accept'        => 'application/json',
                 'Custom-Header' => 'CustomValue'
             ])
             ->get(env("CLIENT_WORKEL_API") . '/admin/users');
 
-        if ($responseApp->successful()) {
-            $all_users = $responseApp->json();
-            if (!$all_users) {
-                Log::info('No users found in API');
+        if ($responseClient->successful()) {
+            $clientUsers = $responseClient->json();
+            if (empty($clientUsers)) {
+                Log::info('No users found in Client API');
             }
-            foreach ($all_users as $user) {
+            foreach ($clientUsers as $user) {
                 WorkelUser::updateOrCreate(
-                    attributes: ['id' => $user['id']],
-                    values: [
-                        'name' => $user['name'],
-                        'email' => $user['email'],
-                        'phone' => $user['phone'] ?? '',
-                        'address' => $user['address'] ?? '',
-                        'role' => $user['role'] ?? 'user',
-                        'password' => $user['password'] ?? '',
-                        'status' => $user['status'] ?? 'active',
+                    [
+                        'external_id' => $user['id'],
+                        'api_type'    => 'Client'
+                    ],
+                    [
+                        'name'       => $user['name'],
+                        'email'      => $user['email'],
+                        'phone'      => $user['phone']   ?? '',
+                        'address'    => $user['address'] ?? '',
+                        'role'       => $user['role']    ?? 'user',
+                        'password'   => $user['password'] ?? '',
+                        'status'     => $user['status']  ?? 'active',
                         'created_at' => $user['created_at'],
                         'updated_at' => $user['updated_at'],
-                        'api_type' => 'app',
                     ]
                 );
             }
         } else {
-            Log::error('Failed to fetch users from API', ['response' => $responseApp->body()]);
+            Log::error('Failed to fetch users from Client API', ['response' => $responseClient->body()]);
         }
     }
 }

@@ -32,6 +32,7 @@ return new class extends Migration
             $table->string('subscription_payment_currency')->nullable();
             $table->string('subscription_payment_transaction_id')->nullable();
             $table->text('subscription_payment_receipt')->nullable();
+            
             $table->rememberToken();
             $table->softDeletes();
 
