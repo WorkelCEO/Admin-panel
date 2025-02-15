@@ -86,8 +86,8 @@ class WorkelUserResource extends Resource
                     ->sortable()
                     ->badge()
                     ->color(fn(WorkelUser $record): string => match ($record->api_type) {
-                        'app' => 'success',
-                        'client' => 'danger',
+                        'App' => 'success',
+                        'Client' => 'danger',
                         default => 'gray',
                     }),
                 // Tables\Columns\TextColumn::make('status')
