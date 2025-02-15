@@ -67,7 +67,8 @@ class WorkelUser extends Model
                 'Accept' => 'application/json',
                 'Custom-Header' => 'CustomValue'
             ])
-            ->get(env("CLIENT_WORKEL_API") . '/admin/users');
+            ->get(env("APP_WORKEL_API") . '/admin/users');
+            
         if ($responseClient->successful()) {
             $all_users = $responseClient->json();
             if (!$all_users) {
@@ -98,7 +99,8 @@ class WorkelUser extends Model
                 'Accept' => 'application/json',
                 'Custom-Header' => 'CustomValue'
             ])
-            ->get(env("APP_WORKEL_API") . '/admin/users');
+            ->get(env("CLIENT_WORKEL_API") . '/admin/users');
+
         if ($responseApp->successful()) {
             $all_users = $responseApp->json();
             if (!$all_users) {
