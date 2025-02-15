@@ -22,8 +22,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // Schedule the sync:workel-users command to run every five minutes.
-        $schedule->command('sync:workel-users')->everyFiveMinutes();
+        // Schedule the sync:workel-users command to run every minutes.
+        $schedule->command('sync:workel-users')->everyMinute();
     }
 
     /**
