@@ -4,6 +4,7 @@ namespace App\Console;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
+use Illuminate\Support\Facades\Log;
 
 class Kernel extends ConsoleKernel
 {
@@ -22,8 +23,12 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // Schedule the sync:workel-users command to run every minutes.
-        $schedule->command('sync:workel-users')->everyMinute();
+        $schedule->call(
+            function () {
+                Log::info('The scheduled command is running.');
+            }
+        )->everyMinute();
+        $schedule->command('sync:workel-users')->everySecond();
     }
 
     /**
