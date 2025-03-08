@@ -130,7 +130,10 @@ class WorkelUserResource extends Resource
                 Tables\Columns\TextColumn::make('updated_at')
                     ->searchable()
                     ->sortable(),
-            ])
+            ])->defaultSort(
+                'created_at',
+                'desc'
+            )
             ->filters([
                 //
             ])
@@ -142,6 +145,10 @@ class WorkelUserResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+    protected function getDefaultTableSortDirection(): ?string
+    {
+        return 'desc';
     }
 
     public static function getRelations(): array
