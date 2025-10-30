@@ -35,6 +35,7 @@ class WorkelUser extends Model
         'updated_at',
         'api_type',
         'external_id',
+        'source',
     ];
 
 

@@ -43,6 +43,7 @@ class SyncWorkelUsers extends Command
             if (empty($users)) {
                 Log::info("No users found in {$apiType} API.");
             } else {
+                Log::info("Users found in {$apiType} API.", ['users' => $users]);
                 foreach ($users as $user) {
                     WorkelUser::updateOrCreate(
                         [
@@ -58,6 +59,7 @@ class SyncWorkelUsers extends Command
                             'role'       => $user['role']    ?? 'user',
                             'password'   => $user['password'] ?? '',
                             'status'     => $user['status']  ?? 'active',
+                            'source'     => $user['source']  ?? 'api',
                             'created_at' => $user['created_at'],
                             'updated_at' => $user['updated_at'],
                         ]
@@ -71,4 +73,3 @@ class SyncWorkelUsers extends Command
         }
     }
 }
-    

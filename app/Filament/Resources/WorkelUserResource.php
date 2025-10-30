@@ -81,6 +81,9 @@ class WorkelUserResource extends Resource
                 Tables\Columns\TextColumn::make('role')
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('source')
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('api_type')
                     ->searchable()
                     ->sortable()
@@ -93,7 +96,7 @@ class WorkelUserResource extends Resource
                 // Tables\Columns\TextColumn::make('status')
                 //     ->searchable()
                 //     ->sortable(),
-                // Tables\Columns\TextColumn::make('subscription_type')
+                // Table    s\Columns\TextColumn::make('subscription_type')
                 //     ->searchable()
                 //     ->sortable(),
                 // Tables\Columns\TextColumn::make('subscription_start_date')
