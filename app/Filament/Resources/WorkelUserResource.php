@@ -133,7 +133,7 @@ class WorkelUserResource extends Resource
                 Tables\Columns\TextColumn::make('updated_at')
                     ->searchable()
                     ->sortable(),
-            ])->defaultSort(
+            ])->poll('60s')->defaultSort(
                 'created_at',
                 'desc'
             )
