@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    'email_logs_api' => [
+        'app' => [
+            'base_url' => env('APP_WORKEL_API', 'https://api.workel.com'),
+            'token' => env('API_APP_TOKEN'),
+        ],
+        'client' => [
+            'base_url' => env('CLIENT_WORKEL_API', 'https://api.workel.com'),
+            'token' => env('API_CLIENT_TOKEN'),
+        ],
+    ],
+
 ];
