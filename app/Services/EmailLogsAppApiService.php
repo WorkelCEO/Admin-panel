@@ -2,96 +2,65 @@
 
 namespace App\Services;
 
+use App\DTOs\EmailLogListResponse;
+use App\DTOs\EmailLogStatisticsResponse;
+use App\Exceptions\ApiException;
+use App\Exceptions\ApiNotFoundException;
 use App\Models\EmailLog;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Http\Client\RequestException;
 
 /**
  * Email Logs API Service - App API
  * 
  * Handles all communication with the Email Logs API for App source.
  */
-class EmailLogsAppApiService
+class EmailLogsAppApiService extends BaseApiService
 {
-    /**
-     * Base URL for the Email Logs API
-     */
-    protected string $baseUrl;
-
-    /**
-     * Bearer token for authentication
-     */
-    protected ?string $token;
-
-    /**
-     * Create a new service instance.
-     */
-    public function __construct()
+    protected function getBaseUrl(): string
     {
-        $this->baseUrl = config('services.email_logs_api.app.base_url');
-        $this->token = config('services.email_logs_api.app.token');
+        return config('services.email_logs_api.app.base_url');
     }
 
-    /**
-     * Get HTTP client with authentication headers.
-     *
-     * @return \Illuminate\Http\Client\PendingRequest
-     */
-    protected function client()
+    protected function getToken(): ?string
     {
-        $headers = [
-            'Accept' => 'application/json',
-            'Content-Type' => 'application/json',
-        ];
+        return config('services.email_logs_api.app.token');
+    }
 
-        if ($this->token) {
-            $headers['Authorization'] = 'Bearer ' . $this->token;
-        }
-
-        return Http::withHeaders($headers)->timeout(10); // Reduced from 30s to 10s for faster failures
+    protected function getServiceName(): string
+    {
+        return 'email_logs_app';
     }
 
     /**
      * Get paginated list of email logs.
      *
      * @param array $params Query parameters for filtering
-     * @return array
+     * @return array{data: EmailLog[], meta: array}
      */
     public function getEmailLogs(array $params = []): array
     {
         try {
-            $response = $this->client()
-                ->get($this->baseUrl . '/admin/email-logs', $params);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                
-                // Convert API data to EmailLog models
-                $emailLogs = collect($data['data'] ?? [])
-                    ->map(fn($item) => EmailLog::fromApi($item))
-                    ->all();
-
-                return [
-                    'data' => $emailLogs,
-                    'meta' => $data['meta'] ?? [],
-                ];
-            }
-
-            Log::error('Failed to fetch email logs (App)', [
-                'status' => $response->status(),
-                'body' => $response->body(),
+            $response = $this->get('/admin/email-logs', $params, 30); // Cache for 30 seconds
+            
+            $emailLogListResponse = EmailLogListResponse::fromApiResponse([
+                'data' => $response->data,
+                'meta' => $response->meta,
             ]);
 
             return [
-                'data' => [],
-                'meta' => [],
+                'data' => $emailLogListResponse->getEmailLogs(),
+                'meta' => [
+                    'total' => $emailLogListResponse->getTotal(),
+                    'per_page' => $emailLogListResponse->getPerPage(),
+                    'current_page' => $emailLogListResponse->getCurrentPage(),
+                    'last_page' => $emailLogListResponse->getLastPage(),
+                ],
             ];
-        } catch (RequestException $e) {
-            Log::error('Email Logs API request failed (App)', [
+        } catch (ApiException $e) {
+            Log::error('Failed to fetch email logs (App)', [
                 'message' => $e->getMessage(),
-                'params' => $params,
+                'endpoint' => $e->getEndpoint(),
+                'context' => $e->getContext(),
             ]);
 
             return [
@@ -110,24 +79,24 @@ class EmailLogsAppApiService
     public function getStatistics(array $params = []): array
     {
         try {
-            $response = $this->client()
-                ->get($this->baseUrl . '/admin/email-logs/statistics', $params);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                return $data['data'] ?? [];
-            }
-
-            Log::error('Failed to fetch email logs statistics (App)', [
-                'status' => $response->status(),
-                'body' => $response->body(),
+            $response = $this->get('/admin/email-logs/statistics', $params, 60); // Cache for 60 seconds
+            
+            $statsResponse = EmailLogStatisticsResponse::fromApiResponse([
+                'data' => $response->data,
             ]);
 
-            return [];
-        } catch (RequestException $e) {
-            Log::error('Email Logs API statistics request failed (App)', [
+            return [
+                'total' => $statsResponse->getTotal(),
+                'success' => $statsResponse->getSuccess(),
+                'error' => $statsResponse->getError(),
+                'success_rate' => $statsResponse->getSuccessRate(),
+                'by_date' => $statsResponse->getByDate(),
+            ];
+        } catch (ApiException $e) {
+            Log::error('Failed to fetch email logs statistics (App)', [
                 'message' => $e->getMessage(),
-                'params' => $params,
+                'endpoint' => $e->getEndpoint(),
+                'context' => $e->getContext(),
             ]);
 
             return [];
@@ -143,25 +112,25 @@ class EmailLogsAppApiService
     public function getEmailLog(string $id): ?EmailLog
     {
         try {
-            $response = $this->client()
-                ->get($this->baseUrl . '/admin/email-logs/' . $id);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                return EmailLog::fromApi($data['data'] ?? []);
+            $response = $this->get("/admin/email-logs/{$id}", [], 300); // Cache for 5 minutes
+            
+            if (empty($response->data)) {
+                return null;
             }
 
+            return EmailLog::fromApi($response->data);
+        } catch (ApiNotFoundException $e) {
+            Log::warning('Email log not found (App)', [
+                'id' => $id,
+                'endpoint' => $e->getEndpoint(),
+            ]);
+            return null;
+        } catch (ApiException $e) {
             Log::error('Failed to fetch email log (App)', [
                 'id' => $id,
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
-
-            return null;
-        } catch (RequestException $e) {
-            Log::error('Email Logs API get single request failed (App)', [
                 'message' => $e->getMessage(),
-                'id' => $id,
+                'endpoint' => $e->getEndpoint(),
+                'context' => $e->getContext(),
             ]);
 
             return null;
@@ -177,24 +146,13 @@ class EmailLogsAppApiService
     public function deleteEmailLog(string $id): bool
     {
         try {
-            $response = $this->client()
-                ->delete($this->baseUrl . '/admin/email-logs/' . $id);
-
-            if ($response->successful()) {
-                return true;
-            }
-
+            return $this->delete("/admin/email-logs/{$id}");
+        } catch (ApiException $e) {
             Log::error('Failed to delete email log (App)', [
                 'id' => $id,
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
-
-            return false;
-        } catch (RequestException $e) {
-            Log::error('Email Logs API delete request failed (App)', [
                 'message' => $e->getMessage(),
-                'id' => $id,
+                'endpoint' => $e->getEndpoint(),
+                'context' => $e->getContext(),
             ]);
 
             return false;
@@ -248,25 +206,5 @@ class EmailLogsAppApiService
         return $params;
     }
 
-    /**
-     * Test API connection.
-     *
-     * @return bool
-     */
-    public function testConnection(): bool
-    {
-        try {
-            $response = $this->client()
-                ->get($this->baseUrl . '/admin/email-logs', ['per_page' => 1]);
-
-            return $response->successful();
-        } catch (\Exception $e) {
-            Log::error('Email Logs API connection test failed (App)', [
-                'message' => $e->getMessage(),
-            ]);
-
-            return false;
-        }
-    }
 }
 

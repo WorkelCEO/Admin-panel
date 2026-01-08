@@ -2,32 +2,36 @@
 
 namespace App\Filament\Resources\EmailLogResource\Pages;
 
+use App\Exceptions\ApiException;
+use App\Filament\Concerns\ExtractsTableFilters;
 use App\Filament\Resources\EmailLogResource;
-use App\Services\EmailLogsAppApiService;
+use App\Repositories\EmailLogRepository;
 use Filament\Actions;
-use Filament\Resources\Pages\ListRecords;
+use Filament\Notifications\Notification;
 use Filament\Resources\Components\Tab;
-use Illuminate\Database\Eloquent\Builder;
+use Filament\Resources\Pages\ListRecords;
 use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Contracts\Pagination\CursorPaginator;
+use Illuminate\Database\Eloquent\Builder;
 
 class ListEmailLogs extends ListRecords
 {
+    use ExtractsTableFilters;
+
     protected static string $resource = EmailLogResource::class;
 
-    protected EmailLogsAppApiService $apiService;
+    protected EmailLogRepository $repository;
     
-    // Reduce default items per page for faster loading
     protected static ?string $recordTitleAttribute = 'id';
 
-    public function boot(EmailLogsAppApiService $apiService): void
+    public function boot(EmailLogRepository $repository): void
     {
-        $this->apiService = $apiService;
+        $this->repository = $repository;
     }
     
     public function getDefaultTableRecordsPerPageSelectOption(): int
     {
-        return 10; // Reduced from 15 to 10 for faster initial load
+        return 10;
     }
 
     protected function getHeaderActions(): array
@@ -36,14 +40,13 @@ class ListEmailLogs extends ListRecords
             Actions\Action::make('refresh')
                 ->label('Refresh')
                 ->icon('heroicon-o-arrow-path')
-                ->action('$refresh'),
-        ];
-    }
-
-    protected function getHeaderWidgets(): array
-    {
-        return [
-            // EmailLogResource\Widgets\EmailLogStatsOverview::class,
+                ->action(function () {
+                    $this->refreshTable();
+                    Notification::make()
+                        ->title('Data refreshed')
+                        ->success()
+                        ->send();
+                }),
         ];
     }
 
@@ -52,71 +55,58 @@ class ListEmailLogs extends ListRecords
      */
     protected function paginateTableQuery(Builder $query): Paginator|CursorPaginator
     {
-        $perPage = $this->getTableRecordsPerPage();
-        $page = request()->get('page', 1);
-        
-        // Get table filters
-        $filters = $this->tableFilters ?? [];
-        $filterData = [];
+        try {
+            $perPage = $this->getTableRecordsPerPage();
+            $page = request()->get('page', 1);
+            
+            // Extract filters using shared trait
+            $filterData = $this->extractTableFilters();
+            $filterData = $this->applyTabFilters($filterData);
 
-        // Extract filter values
-        if (isset($filters['status']['value'])) {
-            $filterData['status'] = $filters['status']['value'];
+            // Build query parameters
+            $params = $this->repository->buildQueryParams('app', $filterData, $perPage, $page);
+
+            // Fetch data from API
+            $response = $this->repository->getEmailLogs('app', $params);
+
+            // Create a custom paginator
+            $meta = $response['meta'];
+            
+            return new \Illuminate\Pagination\LengthAwarePaginator(
+                $response['data'],
+                $meta['total'] ?? 0,
+                $meta['per_page'] ?? $perPage,
+                $meta['current_page'] ?? $page,
+                [
+                    'path' => request()->url(),
+                    'query' => request()->query(),
+                ]
+            );
+        } catch (ApiException $e) {
+            // Show user-friendly error notification
+            Notification::make()
+                ->title('Failed to load email logs')
+                ->body('Unable to connect to the API. Please try again or contact support if the problem persists.')
+                ->danger()
+                ->actions([
+                    Notification::make('retry')
+                        ->label('Retry')
+                        ->action(fn() => $this->refreshTable()),
+                ])
+                ->send();
+
+            // Return empty paginator
+            return new \Illuminate\Pagination\LengthAwarePaginator(
+                [],
+                0,
+                10,
+                1,
+                [
+                    'path' => request()->url(),
+                    'query' => request()->query(),
+                ]
+            );
         }
-
-        if (isset($filters['email_type']['value'])) {
-            $filterData['email_type'] = $filters['email_type']['value'];
-        }
-
-        if (isset($filters['date_range'])) {
-            if (!empty($filters['date_range']['date_from'])) {
-                $filterData['date_from'] = $filters['date_range']['date_from'];
-            }
-            if (!empty($filters['date_range']['date_to'])) {
-                $filterData['date_to'] = $filters['date_range']['date_to'];
-            }
-        }
-
-        if (isset($filters['recipient_email']['recipient_email'])) {
-            $filterData['recipient_email'] = $filters['recipient_email']['recipient_email'];
-        }
-
-        // Get search value
-        $search = $this->getTableSearch();
-        if ($search) {
-            $filterData['search'] = $search;
-        }
-
-        // Apply tab filters
-        $activeTab = $this->activeTab ?? 'all';
-        if ($activeTab === 'success') {
-            $filterData['status'] = 'success';
-        } elseif ($activeTab === 'error') {
-            $filterData['status'] = 'error';
-        } elseif ($activeTab === 'today') {
-            $filterData['date_from'] = now()->format('Y-m-d');
-            $filterData['date_to'] = now()->format('Y-m-d');
-        }
-
-        // Build query parameters
-        $params = $this->apiService->buildQueryParams($filterData, $perPage, $page);
-
-        // Fetch data from API
-        $response = $this->apiService->getEmailLogs($params);
-
-        // Create a custom paginator
-        $meta = $response['meta'];
-        
-        return new \Illuminate\Pagination\LengthAwarePaginator(
-            $response['data'],
-            $meta['total'] ?? 0,
-            $meta['per_page'] ?? $perPage,
-            $meta['current_page'] ?? $page,
-            [
-                'path' => request()->url(),
-                'query' => request()->query(),
-            ]
-        );
     }
 
     public function getTabs(): array

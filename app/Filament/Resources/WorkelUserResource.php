@@ -68,6 +68,9 @@ class WorkelUserResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (\Illuminate\Database\Eloquent\Builder $query) => 
+                $query->where('role', '!=', 'admin') // Hide users with role 'admin'
+            )
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()
@@ -137,9 +140,6 @@ class WorkelUserResource extends Resource
                 'created_at',
                 'desc'
             )
-            ->filters([
-                //
-            ])
             ->actions([
                 Tables\Actions\EditAction::make(),
             ])

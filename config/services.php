@@ -46,4 +46,25 @@ return [
         ],
     ],
 
+    'workel_api' => [
+        'app' => [
+            'base_url' => env('APP_WORKEL_API', 'https://api.workel.com'),
+            'token' => env('API_APP_TOKEN'),
+        ],
+        'client' => [
+            'base_url' => env('CLIENT_WORKEL_API', 'https://api.workel.com'),
+            'token' => env('API_CLIENT_TOKEN'),
+        ],
+    ],
+
+    'admin_api' => [
+        'base_url' => env('ADMIN_API_BASE_URL', 'https://your-domain.com/api/admin'),
+        'verify_ssl' => env('ADMIN_API_VERIFY_SSL', true), // Set to false only in development
+        'rate_limits' => [
+            'authentication' => 5, // requests per minute
+            'general' => 60, // requests per minute
+            'sensitive' => 10, // requests per minute
+        ],
+    ],
+
 ];

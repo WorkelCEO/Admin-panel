@@ -8,4 +8,9 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote')->hourly();
 
-Schedule::command('sync:workel-users')->everyMinute();
+// Schedule Workel users synchronization from Admin API
+Schedule::command('sync:workel-users')
+    ->hourly()
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/sync-workel-users.log'));

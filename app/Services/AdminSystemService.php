@@ -1,0 +1,99 @@
+<?php
+
+namespace App\Services;
+
+use App\DTOs\ApiResponse;
+use App\DTOs\SystemHealthResponse;
+use App\DTOs\SystemInfoResponse;
+use App\DTOs\SystemStatsResponse;
+use App\Exceptions\ApiException;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Session;
+
+/**
+ * Admin System Service
+ */
+class AdminSystemService extends BaseApiService
+{
+    protected function getBaseUrl(): string
+    {
+        return config('services.admin_api.base_url', env('ADMIN_API_BASE_URL', 'https://your-domain.com/api/admin'));
+    }
+
+    protected function getToken(): ?string
+    {
+        return Session::get('admin_api_token') ?? Cache::get('admin_api_token');
+    }
+
+    protected function getServiceName(): string
+    {
+        return 'admin_api_system';
+    }
+
+    /**
+     * Get system information
+     */
+    public function getSystemInfo(): ?SystemInfoResponse
+    {
+        try {
+            $response = $this->get('/system/info', [], 300); // Cache for 5 minutes
+            
+            return SystemInfoResponse::fromApiResponse([
+                'data' => $response->data,
+                'success' => $response->success,
+            ]);
+        } catch (ApiException $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Get system health
+     */
+    public function getSystemHealth(): ?SystemHealthResponse
+    {
+        try {
+            $response = $this->get('/system/health', [], 60); // Cache for 60 seconds
+            
+            return SystemHealthResponse::fromApiResponse([
+                'data' => $response->data,
+                'success' => $response->success,
+            ]);
+        } catch (ApiException $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Get system statistics
+     */
+    public function getSystemStats(): ?SystemStatsResponse
+    {
+        try {
+            $response = $this->get('/system/stats', [], 120); // Cache for 2 minutes
+            
+            return SystemStatsResponse::fromApiResponse([
+                'data' => $response->data,
+                'success' => $response->success,
+            ]);
+        } catch (ApiException $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Override client to include admin token
+     */
+    protected function client(): PendingRequest
+    {
+        $client = parent::client();
+        
+        $token = $this->getToken();
+        if ($token) {
+            $client->withToken($token);
+        }
+
+        return $client;
+    }
+}

@@ -36,6 +36,7 @@ class WorkelUser extends Model
         'api_type',
         'external_id',
         'source',
+        'email_verified_at',
     ];
 
 

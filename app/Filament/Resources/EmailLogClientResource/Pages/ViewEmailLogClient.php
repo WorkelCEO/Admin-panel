@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\EmailLogClientResource\Pages;
 
+use App\Exceptions\ApiException;
+use App\Exceptions\ApiNotFoundException;
 use App\Filament\Resources\EmailLogClientResource;
-use App\Services\EmailLogsClientApiService;
+use App\Repositories\EmailLogRepository;
 use Filament\Actions;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Notifications\Notification;
@@ -13,11 +15,11 @@ class ViewEmailLogClient extends ViewRecord
 {
     protected static string $resource = EmailLogClientResource::class;
 
-    protected EmailLogsClientApiService $apiService;
+    protected EmailLogRepository $repository;
 
-    public function boot(EmailLogsClientApiService $apiService): void
+    public function boot(EmailLogRepository $repository): void
     {
-        $this->apiService = $apiService;
+        $this->repository = $repository;
     }
 
     /**
@@ -25,20 +27,39 @@ class ViewEmailLogClient extends ViewRecord
      */
     public function mount(int | string $record): void
     {
-        $this->record = $this->resolveRecord($record);
+        try {
+            $this->record = $this->resolveRecord($record);
 
-        if (!$this->record) {
+            if (!$this->record) {
+                Notification::make()
+                    ->title('Email log not found')
+                    ->body('The requested email log could not be found. It may have been deleted or the ID is invalid.')
+                    ->danger()
+                    ->send();
+
+                $this->redirect(static::getResource()::getUrl('index'));
+                return;
+            }
+
+            $this->authorizeAccess();
+            $this->fillForm();
+        } catch (ApiException $e) {
             Notification::make()
-                ->title('Email log not found')
+                ->title('Failed to load email log')
+                ->body('Unable to connect to the API. Please try again.')
                 ->danger()
+                ->actions([
+                    Notification::make('retry')
+                        ->label('Retry')
+                        ->action(fn() => $this->mount($record)),
+                    Notification::make('back')
+                        ->label('Back to List')
+                        ->action(fn() => $this->redirect(static::getResource()::getUrl('index'))),
+                ])
                 ->send();
 
             $this->redirect(static::getResource()::getUrl('index'));
         }
-
-        $this->authorizeAccess();
-
-        $this->fillForm();
     }
 
     /**
@@ -46,18 +67,19 @@ class ViewEmailLogClient extends ViewRecord
      */
     public function resolveRecord(int | string $key): Model
     {
-        $emailLog = $this->apiService->getEmailLog($key);
-        
-        if (!$emailLog) {
-            Notification::make()
-                ->title('Email log not found')
-                ->danger()
-                ->send();
-
-            $this->redirect(static::getResource()::getUrl('index'));
+        try {
+            $emailLog = $this->repository->getEmailLog('client', $key);
+            
+            if (!$emailLog) {
+                throw new ApiNotFoundException("Email log not found", "/admin/email-logs/{$key}");
+            }
+            
+            return $emailLog;
+        } catch (ApiNotFoundException $e) {
+            throw $e;
+        } catch (ApiException $e) {
+            throw $e;
         }
-        
-        return $emailLog;
     }
 
     protected function getHeaderActions(): array
@@ -71,41 +93,35 @@ class ViewEmailLogClient extends ViewRecord
             Actions\DeleteAction::make()
                 ->requiresConfirmation()
                 ->action(function () {
-                    if ($this->apiService->deleteEmailLog($this->record->id)) {
-                        Notification::make()
-                            ->title('Email log deleted successfully')
-                            ->success()
-                            ->send();
+                    try {
+                        if ($this->repository->deleteEmailLog('client', $this->record->id)) {
+                            Notification::make()
+                                ->title('Email log deleted successfully')
+                                ->success()
+                                ->send();
 
-                        $this->redirect(static::getResource()::getUrl('index'));
-                    } else {
+                            $this->redirect(static::getResource()::getUrl('index'));
+                        } else {
+                            Notification::make()
+                                ->title('Failed to delete email log')
+                                ->body('Please try again or contact support if the problem persists.')
+                                ->danger()
+                                ->actions([
+                                    Notification::make('retry')
+                                        ->label('Retry')
+                                        ->action(fn() => $this->repository->deleteEmailLog('client', $this->record->id)),
+                                ])
+                                ->send();
+                        }
+                    } catch (ApiException $e) {
                         Notification::make()
                             ->title('Failed to delete email log')
+                            ->body('Unable to connect to the API. Please try again.')
                             ->danger()
                             ->send();
                     }
                 }),
         ];
-    }
-
-    protected function getFooterWidgets(): array
-    {
-        return [
-            // Additional widgets can be added here
-        ];
-    }
-
-    /**
-     * Get custom view data for the page
-     */
-    protected function getViewData(): array
-    {
-        return array_merge(parent::getViewData(), [
-            'emailLog' => $this->record,
-            'metadata' => $this->record->metadata ?? [],
-            'isSuccess' => $this->record->isSuccess(),
-            'isError' => $this->record->isError(),
-        ]);
     }
 }
 

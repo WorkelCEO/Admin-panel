@@ -1,0 +1,85 @@
+<?php
+
+namespace App\Services;
+
+use App\DTOs\ApiResponse;
+use App\Exceptions\ApiException;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Session;
+
+/**
+ * Admin Activity Log Service
+ */
+class AdminActivityLogService extends BaseApiService
+{
+    protected function getBaseUrl(): string
+    {
+        return config('services.admin_api.base_url', env('ADMIN_API_BASE_URL', 'https://your-domain.com/api/admin'));
+    }
+
+    protected function getToken(): ?string
+    {
+        return Session::get('admin_api_token') ?? Cache::get('admin_api_token');
+    }
+
+    protected function getServiceName(): string
+    {
+        return 'admin_api_activity_logs';
+    }
+
+    /**
+     * Get all activity logs
+     */
+    public function getActivityLogs(array $params = []): array
+    {
+        try {
+            $response = $this->get('/activity-logs', $params, 30); // Cache for 30 seconds
+            
+            return [
+                'data' => $response->data['data'] ?? [],
+                'meta' => $response->data['meta'] ?? [],
+            ];
+        } catch (ApiException $e) {
+            return [
+                'data' => [],
+                'meta' => [],
+            ];
+        }
+    }
+
+    /**
+     * Get admin activity logs
+     */
+    public function getAdminActivityLogs(array $params = []): array
+    {
+        try {
+            $response = $this->get('/activity-logs/admin', $params, 30); // Cache for 30 seconds
+            
+            return [
+                'data' => $response->data['data'] ?? [],
+                'meta' => $response->data['meta'] ?? [],
+            ];
+        } catch (ApiException $e) {
+            return [
+                'data' => [],
+                'meta' => [],
+            ];
+        }
+    }
+
+    /**
+     * Override client to include admin token
+     */
+    protected function client(): PendingRequest
+    {
+        $client = parent::client();
+        
+        $token = $this->getToken();
+        if ($token) {
+            $client->withToken($token);
+        }
+
+        return $client;
+    }
+}
