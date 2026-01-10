@@ -72,11 +72,14 @@ class ListAdminUsers extends ListRecords
 
             $response = $this->repository->getUsers($params);
 
+            // Ensure we have proper meta structure from standardized pagination
+            $meta = $response['meta'] ?? [];
+            
             return new \Illuminate\Pagination\LengthAwarePaginator(
-                $response['data'],
-                $response['meta']['total'] ?? 0,
-                $response['meta']['per_page'] ?? $perPage,
-                $response['meta']['current_page'] ?? $page,
+                $response['data'] ?? [],
+                $meta['total'] ?? 0,
+                $meta['per_page'] ?? $perPage,
+                $meta['current_page'] ?? $page,
                 [
                     'path' => request()->url(),
                     'query' => request()->query(),

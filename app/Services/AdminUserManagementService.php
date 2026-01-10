@@ -5,6 +5,7 @@ namespace App\Services;
 use App\DTOs\ApiResponse;
 use App\DTOs\UserResponse;
 use App\Exceptions\ApiException;
+use App\Services\Concerns\HandlesApiPagination;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Session;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Session;
  */
 class AdminUserManagementService extends BaseApiService
 {
+    use HandlesApiPagination;
     protected function getBaseUrl(): string
     {
         return config('services.admin_api.base_url', env('ADMIN_API_BASE_URL', 'https://your-domain.com/api/admin'));
@@ -37,47 +39,8 @@ class AdminUserManagementService extends BaseApiService
         try {
             $response = $this->get('/users', $params, 0); // Don't cache for sync operations
             
-            // Log raw response for debugging
-            \Illuminate\Support\Facades\Log::debug('Admin API getUsers response', [
-                'params' => $params,
-                'response_data' => $response->data,
-                'response_type' => gettype($response->data),
-            ]);
-            
-            // Handle different response structures
-            // Admin API might return: { data: [...], meta: {...} } or { data: { data: [...], meta: {...} } }
-            $responseData = $response->data;
-            
-            // Check if data is nested
-            if (isset($responseData['data']) && is_array($responseData['data'])) {
-                // Structure: { data: { data: [...], meta: {...} } }
-                $data = $responseData['data'];
-                $meta = $responseData['meta'] ?? [];
-            } elseif (is_array($responseData) && isset($responseData[0])) {
-                // Structure: { data: [...] } - direct array
-                $data = $responseData;
-                $meta = [];
-            } else {
-                // Structure: { data: [...], meta: {...} } - flat structure
-                $data = $responseData['data'] ?? [];
-                $meta = $responseData['meta'] ?? [];
-            }
-            
-            // Extract pagination from meta or response
-            $currentPage = $meta['current_page'] ?? $responseData['current_page'] ?? 1;
-            $perPage = $meta['per_page'] ?? $responseData['per_page'] ?? 15;
-            $total = $meta['total'] ?? $responseData['total'] ?? (is_array($data) ? count($data) : 0);
-            $lastPage = $meta['last_page'] ?? $responseData['last_page'] ?? 1;
-            
-            return [
-                'data' => is_array($data) ? $data : [],
-                'meta' => [
-                    'current_page' => (int) $currentPage,
-                    'per_page' => (int) $perPage,
-                    'total' => (int) $total,
-                    'last_page' => (int) $lastPage,
-                ],
-            ];
+            // Use standardized pagination extraction
+            return $this->extractPaginatedData($response);
         } catch (ApiException $e) {
             \Illuminate\Support\Facades\Log::error('Admin API getUsers error', [
                 'message' => $e->getMessage(),
@@ -85,6 +48,7 @@ class AdminUserManagementService extends BaseApiService
                 'context' => $e->getContext(),
             ]);
             
+            // Return empty paginated response
             return [
                 'data' => [],
                 'meta' => [
@@ -245,45 +209,7 @@ class AdminUserManagementService extends BaseApiService
     }
 
     /**
-     * Execute PUT request
+     * PUT method is inherited from BaseApiService with full logging
+     * No override needed - uses parent::put() which includes comprehensive logging
      */
-    protected function put(string $endpoint, array $data = []): ApiResponse
-    {
-        if (!$this->circuitBreaker->allowsRequest()) {
-            throw new \App\Exceptions\ApiConnectionException(
-                "Service temporarily unavailable. Circuit breaker is open.",
-                $endpoint
-            );
-        }
-
-        try {
-            $response = $this->client()->put($this->baseUrl . $endpoint, $data);
-
-            if ($response->successful()) {
-                $this->circuitBreaker->recordSuccess();
-                $responseData = $response->json();
-                return ApiResponse::success(
-                    $responseData['data'] ?? $responseData,
-                    $responseData['meta'] ?? []
-                );
-            }
-
-            $this->circuitBreaker->recordFailure();
-            throw new ApiException(
-                "PUT request failed with status {$response->status()}",
-                $response->status(),
-                null,
-                $endpoint,
-                ['status' => $response->status(), 'body' => $response->body()]
-            );
-        } catch (\Illuminate\Http\Client\RequestException $e) {
-            $this->circuitBreaker->recordFailure();
-            throw new \App\Exceptions\ApiConnectionException(
-                "Failed to execute PUT request: " . $e->getMessage(),
-                $endpoint,
-                null,
-                $e
-            );
-        }
-    }
 }

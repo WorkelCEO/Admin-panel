@@ -56,32 +56,32 @@ class ListEmailLogs extends ListRecords
     protected function paginateTableQuery(Builder $query): Paginator|CursorPaginator
     {
         try {
-            $perPage = $this->getTableRecordsPerPage();
-            $page = request()->get('page', 1);
-            
+        $perPage = $this->getTableRecordsPerPage();
+        $page = request()->get('page', 1);
+        
             // Extract filters using shared trait
             $filterData = $this->extractTableFilters();
             $filterData = $this->applyTabFilters($filterData);
 
-            // Build query parameters
+        // Build query parameters
             $params = $this->repository->buildQueryParams('app', $filterData, $perPage, $page);
 
-            // Fetch data from API
+        // Fetch data from API
             $response = $this->repository->getEmailLogs('app', $params);
 
-            // Create a custom paginator
-            $meta = $response['meta'];
-            
-            return new \Illuminate\Pagination\LengthAwarePaginator(
-                $response['data'],
-                $meta['total'] ?? 0,
-                $meta['per_page'] ?? $perPage,
-                $meta['current_page'] ?? $page,
-                [
-                    'path' => request()->url(),
-                    'query' => request()->query(),
-                ]
-            );
+        // Create a custom paginator
+        $meta = $response['meta'];
+        
+        return new \Illuminate\Pagination\LengthAwarePaginator(
+            $response['data'],
+            $meta['total'] ?? 0,
+            $meta['per_page'] ?? $perPage,
+            $meta['current_page'] ?? $page,
+            [
+                'path' => request()->url(),
+                'query' => request()->query(),
+            ]
+        );
         } catch (ApiException $e) {
             // Show user-friendly error notification
             Notification::make()

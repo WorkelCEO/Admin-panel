@@ -113,7 +113,7 @@ class EmailLogsClientApiService extends BaseApiService
     {
         try {
             $response = $this->get("/admin/email-logs/{$id}", [], 300); // Cache for 5 minutes
-            
+
             if (empty($response->data)) {
                 return null;
             }

@@ -3,45 +3,83 @@
 namespace App\Filament\Widgets;
 
 use Carbon\Carbon;
-use App\Models\User;
 use App\Models\WorkelUser;
 use Filament\Widgets\ChartWidget;
-use Filament\Widgets\LineChartWidget;
 
 class UserCreationChart extends ChartWidget
 {
-    protected static ?string $heading = 'Users Created per Day';
+    protected static ?string $heading = 'Users Created per Day (Last 30 Days)';
+    
     protected int | string | array $columnSpan = '3';
+
     protected function getData(): array
     {
-        // Get data for the last 30 days
-        $users = WorkelUser::selectRaw('DATE(created_at) as date, COUNT(*) as count')
+        // Get data for the last 30 days, excluding admin users
+        $startDate = now()->subDays(30)->startOfDay();
+        
+        // Get users created in the last 30 days, excluding admin users
+        // Use raw query to group by date for better performance
+        $usersData = WorkelUser::selectRaw("DATE(created_at) as date, COUNT(*) as count")
+            ->where('created_at', '>=', $startDate)
+            ->where('role', '!=', 'admin') // Exclude admin users
             ->groupBy('date')
             ->orderBy('date')
-            ->take(30)  
             ->get();
 
-        // Prepare the data for the chart
-        $dates = $users->pluck('date')->map(function ($date) {
-            return Carbon::parse($date)->format('Y-m-d');
-        })->toArray();
+        // Convert to key-value array for easy lookup
+        $users = [];
+        foreach ($usersData as $item) {
+            $users[$item->date] = (int) $item->count;
+        }
 
-        $counts = $users->pluck('count')->toArray();
+        // Prepare arrays for the last 30 days
+        $dates = [];
+        $counts = [];
+
+        // Fill the last 30 days, ensuring every day is accounted for
+        for ($i = 30; $i >= 0; $i--) {
+            $date = Carbon::now()->subDays($i)->format('Y-m-d');
+            $dates[] = $date;
+            
+            // Get count for this date, or 0 if no users created
+            $counts[] = $users[$date] ?? 0;
+        }
 
         return [
-            'labels' => $dates,   // The X-axis will be the dates
+            'labels' => $dates,
             'datasets' => [
                 [
                     'label' => 'New Users',
-                    'data' => $counts,  // The Y-axis will show the number of users created
-                    'borderColor' => '#4CAF50',  // Line color
-                    'backgroundColor' => 'rgba(76, 175, 80, 0.2)',  // Optional background fill
+                    'data' => $counts,
+                    'borderColor' => 'rgb(59, 130, 246)',
+                    'backgroundColor' => 'rgba(59, 130, 246, 0.1)',
+                    'fill' => true,
                 ],
             ],
         ];
     }
+
     protected function getType(): string
     {
-        return 'bar';
+        return 'line';
+    }
+
+    protected function getOptions(): array
+    {
+        return [
+            'plugins' => [
+                'legend' => [
+                    'display' => true,
+                ],
+            ],
+            'scales' => [
+                'y' => [
+                    'beginAtZero' => true,
+                    'ticks' => [
+                        'stepSize' => 1,
+                    ],
+                ],
+            ],
+        ];
     }
 }

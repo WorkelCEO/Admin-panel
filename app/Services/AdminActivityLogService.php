@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\DTOs\ApiResponse;
 use App\Exceptions\ApiException;
+use App\Services\Concerns\HandlesApiPagination;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Session;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Session;
  */
 class AdminActivityLogService extends BaseApiService
 {
+    use HandlesApiPagination;
     protected function getBaseUrl(): string
     {
         return config('services.admin_api.base_url', env('ADMIN_API_BASE_URL', 'https://your-domain.com/api/admin'));
@@ -36,14 +38,17 @@ class AdminActivityLogService extends BaseApiService
         try {
             $response = $this->get('/activity-logs', $params, 30); // Cache for 30 seconds
             
-            return [
-                'data' => $response->data['data'] ?? [],
-                'meta' => $response->data['meta'] ?? [],
-            ];
+            // Use standardized pagination extraction
+            return $this->extractPaginatedData($response);
         } catch (ApiException $e) {
             return [
                 'data' => [],
-                'meta' => [],
+                'meta' => [
+                    'current_page' => 1,
+                    'per_page' => 15,
+                    'total' => 0,
+                    'last_page' => 1,
+                ],
             ];
         }
     }
@@ -56,14 +61,17 @@ class AdminActivityLogService extends BaseApiService
         try {
             $response = $this->get('/activity-logs/admin', $params, 30); // Cache for 30 seconds
             
-            return [
-                'data' => $response->data['data'] ?? [],
-                'meta' => $response->data['meta'] ?? [],
-            ];
+            // Use standardized pagination extraction
+            return $this->extractPaginatedData($response);
         } catch (ApiException $e) {
             return [
                 'data' => [],
-                'meta' => [],
+                'meta' => [
+                    'current_page' => 1,
+                    'per_page' => 15,
+                    'total' => 0,
+                    'last_page' => 1,
+                ],
             ];
         }
     }

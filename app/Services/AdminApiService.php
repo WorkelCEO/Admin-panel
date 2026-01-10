@@ -9,6 +9,7 @@ use App\Exceptions\ApiNotFoundException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 
 /**
@@ -138,7 +139,29 @@ class AdminApiService extends BaseApiService
      */
     protected function postWithoutToken(string $endpoint, array $data = []): ApiResponse
     {
+        $startTime = microtime(true);
+        $fullUrl = $this->baseUrl . $endpoint;
+        
+        // Log API request (sanitize password in data)
+        $sanitizedData = $data;
+        if (isset($sanitizedData['password'])) {
+            $sanitizedData['password'] = '***REDACTED***';
+        }
+        
+        Log::info("API Request: POST {$fullUrl} (without token)", [
+            'service' => $this->getServiceName(),
+            'endpoint' => $endpoint,
+            'data_keys' => array_keys($data),
+            'data_size' => strlen(json_encode($data)),
+            'sanitized_data' => $sanitizedData,
+        ]);
+
         if (!$this->circuitBreaker->allowsRequest()) {
+            Log::warning("Circuit breaker is open for POST {$fullUrl} (without token)", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+            ]);
+            
             throw new \App\Exceptions\ApiConnectionException(
                 "Service temporarily unavailable. Circuit breaker is open.",
                 $endpoint
@@ -156,16 +179,24 @@ class AdminApiService extends BaseApiService
                 $client = $client->withoutVerifying();
             }
             
-            $response = $client->post($this->baseUrl . $endpoint, $data);
+            $response = $client->post($fullUrl, $data);
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $statusCode = $response->status();
+            $responseSize = strlen($response->body());
 
             if ($response->successful()) {
                 $this->circuitBreaker->recordSuccess();
                 $responseData = $response->json();
                 
-                // Log successful response for debugging
-                \Illuminate\Support\Facades\Log::debug('Admin API login response', [
+                // Log successful response
+                Log::info("API Response: POST {$fullUrl} (without token) - Success", [
+                    'service' => $this->getServiceName(),
                     'endpoint' => $endpoint,
+                    'status_code' => $statusCode,
+                    'duration_ms' => $duration,
+                    'response_size_bytes' => $responseSize,
                     'success' => $responseData['success'] ?? true,
+                    'has_token' => !empty($responseData['data']['token'] ?? null),
                     'has_data' => !empty($responseData['data']),
                 ]);
                 
@@ -187,30 +218,54 @@ class AdminApiService extends BaseApiService
             $this->circuitBreaker->recordFailure();
             
             $responseData = $response->json();
-            $errorMessage = $responseData['message'] ?? "POST request failed with status {$response->status()}";
+            $errorMessage = $responseData['message'] ?? "POST request failed with status {$statusCode}";
             
-            \Illuminate\Support\Facades\Log::error('Admin API login failed', [
+            Log::error("API Response: POST {$fullUrl} (without token) - Error", [
+                'service' => $this->getServiceName(),
                 'endpoint' => $endpoint,
-                'status' => $response->status(),
-                'response' => $responseData,
-                'body' => $response->body(),
+                'status_code' => $statusCode,
+                'duration_ms' => $duration,
+                'message' => $errorMessage,
+                'response_preview' => substr($response->body(), 0, 500),
             ]);
             
             throw new ApiException(
                 $errorMessage,
-                $response->status(),
+                $statusCode,
                 null,
                 $endpoint,
-                ['status' => $response->status(), 'body' => $response->body(), 'response_data' => $responseData]
+                ['status' => $statusCode, 'body' => $response->body(), 'response_data' => $responseData]
             );
         } catch (\Illuminate\Http\Client\RequestException $e) {
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
             $this->circuitBreaker->recordFailure();
+            
+            Log::error("API Connection Error: POST {$fullUrl} (without token)", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'message' => $e->getMessage(),
+                'duration_ms' => $duration,
+            ]);
+            
             throw new \App\Exceptions\ApiConnectionException(
                 "Failed to execute POST request: " . $e->getMessage(),
                 $endpoint,
                 null,
                 $e
             );
+        } catch (\Exception $e) {
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $this->circuitBreaker->recordFailure();
+            
+            Log::error("API Unexpected Error: POST {$fullUrl} (without token)", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'exception_type' => get_class($e),
+                'message' => $e->getMessage(),
+                'duration_ms' => $duration,
+            ]);
+            
+            throw $e;
         }
     }
 

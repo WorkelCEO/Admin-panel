@@ -12,6 +12,7 @@ use App\DTOs\UserResponse;
 use App\Services\AdminActivityLogService;
 use App\Services\AdminApiService;
 use App\Services\AdminBackupService;
+use App\Services\AdminLoginHistoryService;
 use App\Services\AdminSettingsService;
 use App\Services\AdminSystemService;
 use App\Services\AdminUserManagementService;
@@ -27,7 +28,8 @@ class AdminRepository
         private AdminBackupService $backupService,
         private AdminSystemService $systemService,
         private AdminActivityLogService $activityService,
-        private AdminSettingsService $settingsService
+        private AdminSettingsService $settingsService,
+        private AdminLoginHistoryService $loginHistoryService
     ) {
     }
 
@@ -105,7 +107,28 @@ class AdminRepository
 
     public function getUserLoginHistory(string $userId, array $params = []): array
     {
-        return $this->userService->getUserLoginHistory($userId, $params);
+        return $this->loginHistoryService->getUserLoginHistory($userId, $params);
+    }
+
+    // Login history methods
+    public function getLoginHistory(array $params = []): array
+    {
+        return $this->loginHistoryService->getLoginHistory($params);
+    }
+
+    public function getLoginHistoryForUser(string $userId, array $params = []): array
+    {
+        return $this->loginHistoryService->getUserLoginHistory($userId, $params);
+    }
+
+    public function getLoginStatistics(): array
+    {
+        return $this->loginHistoryService->getLoginStatistics();
+    }
+
+    public function cleanupLoginHistory(?string $olderThan = null): ApiResponse
+    {
+        return $this->loginHistoryService->cleanupLoginHistory($olderThan);
     }
 
     // Backup management methods

@@ -28,11 +28,11 @@ class ViewEmailLog extends ViewRecord
     public function mount(int | string $record): void
     {
         try {
-            $this->record = $this->resolveRecord($record);
+        $this->record = $this->resolveRecord($record);
 
-            if (!$this->record) {
-                Notification::make()
-                    ->title('Email log not found')
+        if (!$this->record) {
+            Notification::make()
+                ->title('Email log not found')
                     ->body('The requested email log could not be found. It may have been deleted or the ID is invalid.')
                     ->danger()
                     ->send();
@@ -69,12 +69,12 @@ class ViewEmailLog extends ViewRecord
     {
         try {
             $emailLog = $this->repository->getEmailLog('app', $key);
-            
-            if (!$emailLog) {
+        
+        if (!$emailLog) {
                 throw new ApiNotFoundException("Email log not found", "/admin/email-logs/{$key}");
-            }
-            
-            return $emailLog;
+        }
+        
+        return $emailLog;
         } catch (ApiNotFoundException $e) {
             throw $e;
         } catch (ApiException $e) {
@@ -95,15 +95,15 @@ class ViewEmailLog extends ViewRecord
                 ->action(function () {
                     try {
                         if ($this->repository->deleteEmailLog('app', $this->record->id)) {
-                            Notification::make()
-                                ->title('Email log deleted successfully')
-                                ->success()
-                                ->send();
+                        Notification::make()
+                            ->title('Email log deleted successfully')
+                            ->success()
+                            ->send();
 
-                            $this->redirect(static::getResource()::getUrl('index'));
-                        } else {
-                            Notification::make()
-                                ->title('Failed to delete email log')
+                        $this->redirect(static::getResource()::getUrl('index'));
+                    } else {
+                        Notification::make()
+                            ->title('Failed to delete email log')
                                 ->body('Please try again or contact support if the problem persists.')
                                 ->danger()
                                 ->actions([

@@ -23,45 +23,45 @@ class EmailLogStatsWidget extends BaseWidget
     protected function getStats(): array
     {
         try {
-            // Get statistics for last 30 days
+        // Get statistics for last 30 days
             $stats = $this->repository->getStatistics('app', [
-                'date_from' => now()->subDays(30)->format('Y-m-d'),
-                'date_to' => now()->format('Y-m-d'),
-            ]);
+            'date_from' => now()->subDays(30)->format('Y-m-d'),
+            'date_to' => now()->format('Y-m-d'),
+        ]);
 
-            if (empty($stats)) {
+        if (empty($stats)) {
                 return $this->getEmptyStats('No data available');
-            }
+        }
 
-            $total = $stats['total'] ?? 0;
-            $success = $stats['success'] ?? 0;
-            $error = $stats['error'] ?? 0;
-            $successRate = $stats['success_rate'] ?? 0;
+        $total = $stats['total'] ?? 0;
+        $success = $stats['success'] ?? 0;
+        $error = $stats['error'] ?? 0;
+        $successRate = $stats['success_rate'] ?? 0;
 
-            return [
-                Stat::make('Total Emails (30 days)', number_format($total))
-                    ->description('All emails sent in the last 30 days')
-                    ->descriptionIcon('heroicon-m-envelope')
-                    ->color('primary')
-                    ->chart($this->getChartData($stats['by_date'] ?? [])),
+        return [
+            Stat::make('Total Emails (30 days)', number_format($total))
+                ->description('All emails sent in the last 30 days')
+                ->descriptionIcon('heroicon-m-envelope')
+                ->color('primary')
+                ->chart($this->getChartData($stats['by_date'] ?? [])),
 
-                Stat::make('Successful Emails', number_format($success))
-                    ->description(sprintf('%.1f%% success rate', $successRate))
-                    ->descriptionIcon('heroicon-m-check-circle')
-                    ->color('success')
-                    ->chart($this->getSuccessChartData($stats['by_date'] ?? [])),
+            Stat::make('Successful Emails', number_format($success))
+                ->description(sprintf('%.1f%% success rate', $successRate))
+                ->descriptionIcon('heroicon-m-check-circle')
+                ->color('success')
+                ->chart($this->getSuccessChartData($stats['by_date'] ?? [])),
 
-                Stat::make('Failed Emails', number_format($error))
-                    ->description(sprintf('%d errors in last 30 days', $error))
-                    ->descriptionIcon('heroicon-m-x-circle')
-                    ->color('danger')
-                    ->chart($this->getErrorChartData($stats['by_date'] ?? [])),
+            Stat::make('Failed Emails', number_format($error))
+                ->description(sprintf('%d errors in last 30 days', $error))
+                ->descriptionIcon('heroicon-m-x-circle')
+                ->color('danger')
+                ->chart($this->getErrorChartData($stats['by_date'] ?? [])),
 
-                Stat::make('Success Rate', sprintf('%.1f%%', $successRate))
-                    ->description('Overall delivery success rate')
-                    ->descriptionIcon('heroicon-m-chart-bar')
-                    ->color($successRate >= 90 ? 'success' : ($successRate >= 70 ? 'warning' : 'danger')),
-            ];
+            Stat::make('Success Rate', sprintf('%.1f%%', $successRate))
+                ->description('Overall delivery success rate')
+                ->descriptionIcon('heroicon-m-chart-bar')
+                ->color($successRate >= 90 ? 'success' : ($successRate >= 70 ? 'warning' : 'danger')),
+        ];
         } catch (ApiException $e) {
             return $this->getEmptyStats('API connection failed');
         }

@@ -13,6 +13,7 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Session;
 
 /**
  * Base API Service with retry logic, circuit breaker, and caching
@@ -20,7 +21,6 @@ use Illuminate\Support\Facades\Log;
 abstract class BaseApiService
 {
     protected string $baseUrl;
-    protected ?string $token;
     protected CircuitBreaker $circuitBreaker;
     protected int $maxRetries = 3;
     protected array $retryDelays = [1, 2, 4]; // seconds
@@ -30,7 +30,7 @@ abstract class BaseApiService
     public function __construct()
     {
         $this->baseUrl = $this->getBaseUrl();
-        $this->token = $this->getToken();
+        // Don't store token as instance property - get it fresh on each request
         $this->circuitBreaker = new CircuitBreaker($this->getServiceName());
     }
 
@@ -60,8 +60,10 @@ abstract class BaseApiService
             'Content-Type' => 'application/json',
         ];
 
-        if ($this->token) {
-            $headers['Authorization'] = 'Bearer ' . $this->token;
+        // Get fresh token on each request (don't rely on constructor token)
+        $token = $this->getToken();
+        if ($token) {
+            $headers['Authorization'] = 'Bearer ' . $token;
         }
 
         $client = Http::withHeaders($headers)->timeout($this->timeout);
@@ -80,10 +82,45 @@ abstract class BaseApiService
      */
     protected function get(string $endpoint, array $params = [], ?int $cacheTtl = null): ApiResponse
     {
+        $startTime = microtime(true);
+        $fullUrl = $this->baseUrl . $endpoint;
+        
+        // Get fresh token for logging
+        $token = $this->getToken();
+        
+        // Log API request
+        Log::info("API Request: GET {$fullUrl}", [
+            'service' => $this->getServiceName(),
+            'endpoint' => $endpoint,
+            'params' => $this->sanitizeParams($params),
+            'cache_enabled' => $cacheTtl !== null,
+            'has_token' => !empty($token),
+            'token_preview' => $token ? substr($token, 0, 20) . '...' : null,
+            'base_url' => $this->baseUrl,
+        ]);
+        
+        // Check if token is missing and this is an authenticated endpoint
+        if (empty($token) && !str_contains($endpoint, '/auth/login') && !str_contains($endpoint, '/auth/refresh')) {
+            // Try to get token from Session/Cache directly for logging
+            $sessionToken = Session::has('admin_api_token');
+            $cacheToken = Cache::has('admin_api_token');
+            
+            Log::warning("API Request: GET {$fullUrl} - No authentication token found", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'requires_auth' => true,
+                'session_has_token' => $sessionToken,
+                'cache_has_token' => $cacheToken,
+                'token_from_getToken' => empty($token) ? 'NULL' : 'SET',
+            ]);
+        }
+
         // Check circuit breaker
         if (!$this->circuitBreaker->allowsRequest()) {
             Log::warning("Circuit breaker is open for {$this->getServiceName()}", [
+                'service' => $this->getServiceName(),
                 'endpoint' => $endpoint,
+                'full_url' => $fullUrl,
             ]);
 
             throw new ApiConnectionException(
@@ -97,7 +134,13 @@ abstract class BaseApiService
             $cacheKey = $this->getCacheKey($endpoint, $params);
             $cached = Cache::get($cacheKey);
             if ($cached !== null) {
-                Log::debug("Cache hit for {$endpoint}", ['cache_key' => $cacheKey]);
+                $duration = round((microtime(true) - $startTime) * 1000, 2);
+                Log::debug("API Cache Hit: GET {$fullUrl}", [
+                    'service' => $this->getServiceName(),
+                    'endpoint' => $endpoint,
+                    'cache_key' => $cacheKey,
+                    'duration_ms' => $duration,
+                ]);
                 return $cached;
             }
         }
@@ -109,17 +152,22 @@ abstract class BaseApiService
             try {
                 if ($attempt > 0) {
                     $delay = $this->retryDelays[$attempt - 1] ?? end($this->retryDelays);
-                    Log::info("Retrying API request", [
+                    Log::warning("API Retry: GET {$fullUrl}", [
+                        'service' => $this->getServiceName(),
                         'endpoint' => $endpoint,
                         'attempt' => $attempt + 1,
-                        'delay' => $delay,
+                        'max_attempts' => $this->maxRetries + 1,
+                        'delay_seconds' => $delay,
                     ]);
                     sleep($delay);
                 }
 
                 $response = $this->client()
                     ->timeout($attempt > 0 ? $this->retryTimeout : $this->timeout)
-                    ->get($this->baseUrl . $endpoint, $params);
+                    ->get($fullUrl, $params);
+
+                $duration = round((microtime(true) - $startTime) * 1000, 2);
+                $responseSize = strlen($response->body());
 
                 // Handle different response statuses
                 if ($response->successful()) {
@@ -131,57 +179,166 @@ abstract class BaseApiService
                         $data['meta'] ?? []
                     );
 
+                    // Log successful API response
+                    Log::info("API Response: GET {$fullUrl}", [
+                        'service' => $this->getServiceName(),
+                        'endpoint' => $endpoint,
+                        'status_code' => $response->status(),
+                        'duration_ms' => $duration,
+                        'response_size_bytes' => $responseSize,
+                        'attempt' => $attempt + 1,
+                        'has_data' => !empty($data),
+                        'data_count' => is_array($data['data'] ?? $data) ? count($data['data'] ?? $data) : 0,
+                        'pagination' => isset($data['meta']) || isset($data['current_page']),
+                    ]);
+
                     // Cache successful response
                     if ($cacheTtl !== null) {
                         $cacheKey = $this->getCacheKey($endpoint, $params);
                         Cache::put($cacheKey, $apiResponse, $cacheTtl);
+                        Log::debug("API Response Cached: GET {$fullUrl}", [
+                            'service' => $this->getServiceName(),
+                            'cache_key' => $cacheKey,
+                            'cache_ttl_seconds' => $cacheTtl,
+                        ]);
                     }
 
                     return $apiResponse;
                 }
 
+                $duration = round((microtime(true) - $startTime) * 1000, 2);
+                $statusCode = $response->status();
+                $responseBody = $response->body();
+                $responseData = [];
+                
+                // Try to parse response JSON if possible
+                try {
+                    $responseData = $response->json() ?? [];
+                } catch (\Exception $e) {
+                    // If JSON parsing fails, use empty array
+                }
+
                 // Handle specific error statuses
-                if ($response->status() === 404) {
+                if ($statusCode === 401) {
+                    // 401 Unauthenticated - token might be expired or missing
+                    $this->circuitBreaker->recordSuccess(); // 401 is not a service failure, it's an auth issue
+                    
+                    $token = $this->getToken();
+                    Log::warning("API Response: GET {$fullUrl} - Unauthenticated (401)", [
+                        'service' => $this->getServiceName(),
+                        'endpoint' => $endpoint,
+                        'status_code' => 401,
+                        'duration_ms' => $duration,
+                        'attempt' => $attempt + 1,
+                        'has_token' => !empty($token),
+                        'token_preview' => $token ? substr($token, 0, 20) . '...' : null,
+                        'response_message' => $responseData['message'] ?? 'Unauthenticated',
+                        'response_body' => substr($responseBody, 0, 500),
+                    ]);
+                    
+                    throw new \App\Exceptions\ApiException(
+                        "Unauthenticated. Please log in again.",
+                        $statusCode,
+                        null,
+                        $endpoint,
+                        ['status' => 401, 'body' => $responseBody, 'requires_auth' => true]
+                    );
+                }
+                
+                if ($statusCode === 404) {
                     $this->circuitBreaker->recordSuccess(); // 404 is not a service failure
+                    
+                    Log::warning("API Response: GET {$fullUrl} - Not Found", [
+                        'service' => $this->getServiceName(),
+                        'endpoint' => $endpoint,
+                        'status_code' => 404,
+                        'duration_ms' => $duration,
+                        'attempt' => $attempt + 1,
+                    ]);
+                    
                     throw new ApiNotFoundException(
                         "Resource not found",
                         $endpoint,
-                        ['status' => 404, 'body' => $response->body()]
+                        ['status' => 404, 'body' => $responseBody]
                     );
                 }
 
-                if ($response->status() === 429) {
-                    $retryAfter = (int) $response->header('Retry-After', 60);
+                if ($statusCode === 429) {
+                    $retryAfterHeader = $response->header('Retry-After');
+                    $retryAfter = $retryAfterHeader ? (int) $retryAfterHeader : 60;
                     $this->circuitBreaker->recordFailure();
+                    
+                    Log::warning("API Response: GET {$fullUrl} - Rate Limited", [
+                        'service' => $this->getServiceName(),
+                        'endpoint' => $endpoint,
+                        'status_code' => 429,
+                        'duration_ms' => $duration,
+                        'retry_after_seconds' => $retryAfter,
+                        'attempt' => $attempt + 1,
+                    ]);
+                    
                     throw new ApiRateLimitException(
                         "Rate limit exceeded",
                         $endpoint,
                         $retryAfter,
-                        ['status' => 429, 'body' => $response->body()]
+                        ['status' => 429, 'body' => $responseBody]
                     );
                 }
 
                 // Other errors
                 $this->circuitBreaker->recordFailure();
+                
+                Log::error("API Response: GET {$fullUrl} - Error", [
+                    'service' => $this->getServiceName(),
+                    'endpoint' => $endpoint,
+                    'status_code' => $statusCode,
+                    'duration_ms' => $duration,
+                    'attempt' => $attempt + 1,
+                    'response_preview' => substr($responseBody, 0, 500),
+                ]);
+                
                 throw new ApiException(
-                    "API request failed with status {$response->status()}",
-                    $response->status(),
+                    "API request failed with status {$statusCode}",
+                    $statusCode,
                     null,
                     $endpoint,
-                    ['status' => $response->status(), 'body' => $response->body()]
+                    ['status' => $statusCode, 'body' => $responseBody]
                 );
 
             } catch (ApiException $e) {
+                // Log API exceptions before re-throwing
+                $duration = round((microtime(true) - $startTime) * 1000, 2);
+                Log::error("API Exception: GET {$fullUrl}", [
+                    'service' => $this->getServiceName(),
+                    'endpoint' => $endpoint,
+                    'exception_type' => get_class($e),
+                    'message' => $e->getMessage(),
+                    'duration_ms' => $duration,
+                    'attempt' => $attempt + 1,
+                    'context' => $e->getContext(),
+                ]);
+                
                 // Re-throw API exceptions immediately
                 throw $e;
             } catch (RequestException $e) {
                 $lastException = $e;
+                $duration = round((microtime(true) - $startTime) * 1000, 2);
                 
                 // Check if it's a timeout
                 if (str_contains(strtolower($e->getMessage()), 'timeout') || 
                     str_contains(strtolower($e->getMessage()), 'timed out')) {
                     if ($attempt === $this->maxRetries) {
                         $this->circuitBreaker->recordFailure();
+                        
+                        Log::error("API Timeout: GET {$fullUrl}", [
+                            'service' => $this->getServiceName(),
+                            'endpoint' => $endpoint,
+                            'message' => $e->getMessage(),
+                            'duration_ms' => $duration,
+                            'attempts' => $attempt + 1,
+                            'max_attempts' => $this->maxRetries + 1,
+                        ]);
+                        
                         throw new ApiTimeoutException(
                             "Request timed out after {$this->maxRetries} attempts",
                             $endpoint,
@@ -195,6 +352,16 @@ abstract class BaseApiService
                 // Connection errors
                 if ($attempt === $this->maxRetries) {
                     $this->circuitBreaker->recordFailure();
+                    
+                    Log::error("API Connection Error: GET {$fullUrl}", [
+                        'service' => $this->getServiceName(),
+                        'endpoint' => $endpoint,
+                        'message' => $e->getMessage(),
+                        'duration_ms' => $duration,
+                        'attempts' => $attempt + 1,
+                        'max_attempts' => $this->maxRetries + 1,
+                    ]);
+                    
                     throw new ApiConnectionException(
                         "Failed to connect to API after {$this->maxRetries} attempts: " . $e->getMessage(),
                         $endpoint,
@@ -204,8 +371,21 @@ abstract class BaseApiService
                 }
             } catch (\Exception $e) {
                 $lastException = $e;
+                $duration = round((microtime(true) - $startTime) * 1000, 2);
+                
                 if ($attempt === $this->maxRetries) {
                     $this->circuitBreaker->recordFailure();
+                    
+                    Log::error("API Unexpected Error: GET {$fullUrl}", [
+                        'service' => $this->getServiceName(),
+                        'endpoint' => $endpoint,
+                        'exception_type' => get_class($e),
+                        'message' => $e->getMessage(),
+                        'duration_ms' => $duration,
+                        'attempts' => $attempt + 1,
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    
                     throw new ApiException(
                         "Unexpected error: " . $e->getMessage(),
                         0,
@@ -217,7 +397,17 @@ abstract class BaseApiService
         }
 
         // Should never reach here, but just in case
+        $duration = round((microtime(true) - $startTime) * 1000, 2);
         $this->circuitBreaker->recordFailure();
+        
+        Log::error("API Request Failed: GET {$fullUrl} - All retries exhausted", [
+            'service' => $this->getServiceName(),
+            'endpoint' => $endpoint,
+            'duration_ms' => $duration,
+            'max_attempts' => $this->maxRetries + 1,
+            'last_exception' => $lastException ? get_class($lastException) : null,
+        ]);
+        
         throw new ApiException(
             "Request failed after all retry attempts",
             0,
@@ -231,7 +421,23 @@ abstract class BaseApiService
      */
     protected function post(string $endpoint, array $data = []): ApiResponse
     {
+        $startTime = microtime(true);
+        $fullUrl = $this->baseUrl . $endpoint;
+        
+        // Log API request
+        Log::info("API Request: POST {$fullUrl}", [
+            'service' => $this->getServiceName(),
+            'endpoint' => $endpoint,
+            'data_keys' => array_keys($data),
+            'data_size' => strlen(json_encode($data)),
+        ]);
+
         if (!$this->circuitBreaker->allowsRequest()) {
+            Log::warning("Circuit breaker is open for POST {$fullUrl}", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+            ]);
+            
             throw new ApiConnectionException(
                 "Service temporarily unavailable. Circuit breaker is open.",
                 $endpoint
@@ -239,11 +445,25 @@ abstract class BaseApiService
         }
 
         try {
-            $response = $this->client()->post($this->baseUrl . $endpoint, $data);
+            $response = $this->client()->post($fullUrl, $data);
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $statusCode = $response->status();
+            $responseSize = strlen($response->body());
 
             if ($response->successful()) {
                 $this->circuitBreaker->recordSuccess();
                 $responseData = $response->json();
+                
+                // Log successful API response
+                Log::info("API Response: POST {$fullUrl}", [
+                    'service' => $this->getServiceName(),
+                    'endpoint' => $endpoint,
+                    'status_code' => $statusCode,
+                    'duration_ms' => $duration,
+                    'response_size_bytes' => $responseSize,
+                    'has_data' => !empty($responseData),
+                ]);
+                
                 return ApiResponse::success(
                     $responseData['data'] ?? $responseData,
                     $responseData['meta'] ?? []
@@ -251,21 +471,52 @@ abstract class BaseApiService
             }
 
             $this->circuitBreaker->recordFailure();
+            
+            Log::error("API Response: POST {$fullUrl} - Error", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'status_code' => $statusCode,
+                'duration_ms' => $duration,
+                'response_preview' => substr($response->body(), 0, 500),
+            ]);
+            
             throw new ApiException(
-                "POST request failed with status {$response->status()}",
-                $response->status(),
+                "POST request failed with status {$statusCode}",
+                $statusCode,
                 null,
                 $endpoint,
-                ['status' => $response->status(), 'body' => $response->body()]
+                ['status' => $statusCode, 'body' => $response->body()]
             );
         } catch (RequestException $e) {
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
             $this->circuitBreaker->recordFailure();
+            
+            Log::error("API Connection Error: POST {$fullUrl}", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'message' => $e->getMessage(),
+                'duration_ms' => $duration,
+            ]);
+            
             throw new ApiConnectionException(
                 "Failed to execute POST request: " . $e->getMessage(),
                 $endpoint,
                 null,
                 $e
             );
+        } catch (\Exception $e) {
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $this->circuitBreaker->recordFailure();
+            
+            Log::error("API Unexpected Error: POST {$fullUrl}", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'exception_type' => get_class($e),
+                'message' => $e->getMessage(),
+                'duration_ms' => $duration,
+            ]);
+            
+            throw $e;
         }
     }
 
@@ -274,7 +525,21 @@ abstract class BaseApiService
      */
     protected function delete(string $endpoint): bool
     {
+        $startTime = microtime(true);
+        $fullUrl = $this->baseUrl . $endpoint;
+        
+        // Log API request
+        Log::info("API Request: DELETE {$fullUrl}", [
+            'service' => $this->getServiceName(),
+            'endpoint' => $endpoint,
+        ]);
+
         if (!$this->circuitBreaker->allowsRequest()) {
+            Log::warning("Circuit breaker is open for DELETE {$fullUrl}", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+            ]);
+            
             throw new ApiConnectionException(
                 "Service temporarily unavailable. Circuit breaker is open.",
                 $endpoint
@@ -282,7 +547,9 @@ abstract class BaseApiService
         }
 
         try {
-            $response = $this->client()->delete($this->baseUrl . $endpoint);
+            $response = $this->client()->delete($fullUrl);
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $statusCode = $response->status();
 
             if ($response->successful()) {
                 $this->circuitBreaker->recordSuccess();
@@ -290,20 +557,180 @@ abstract class BaseApiService
                 // Invalidate cache for this endpoint
                 $this->invalidateCache($endpoint);
                 
+                // Log successful API response
+                Log::info("API Response: DELETE {$fullUrl}", [
+                    'service' => $this->getServiceName(),
+                    'endpoint' => $endpoint,
+                    'status_code' => $statusCode,
+                    'duration_ms' => $duration,
+                    'cache_invalidated' => true,
+                ]);
+                
                 return true;
             }
 
             $this->circuitBreaker->recordFailure();
+            
+            Log::warning("API Response: DELETE {$fullUrl} - Failed", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'status_code' => $statusCode,
+                'duration_ms' => $duration,
+            ]);
+            
             return false;
         } catch (RequestException $e) {
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
             $this->circuitBreaker->recordFailure();
+            
+            Log::error("API Connection Error: DELETE {$fullUrl}", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'message' => $e->getMessage(),
+                'duration_ms' => $duration,
+            ]);
+            
             throw new ApiConnectionException(
                 "Failed to execute DELETE request: " . $e->getMessage(),
                 $endpoint,
                 null,
                 $e
             );
+        } catch (\Exception $e) {
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $this->circuitBreaker->recordFailure();
+            
+            Log::error("API Unexpected Error: DELETE {$fullUrl}", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'exception_type' => get_class($e),
+                'message' => $e->getMessage(),
+                'duration_ms' => $duration,
+            ]);
+            
+            throw $e;
         }
+    }
+
+    /**
+     * Execute PUT request
+     */
+    protected function put(string $endpoint, array $data = []): ApiResponse
+    {
+        $startTime = microtime(true);
+        $fullUrl = $this->baseUrl . $endpoint;
+        
+        // Log API request
+        Log::info("API Request: PUT {$fullUrl}", [
+            'service' => $this->getServiceName(),
+            'endpoint' => $endpoint,
+            'data_keys' => array_keys($data),
+            'data_size' => strlen(json_encode($data)),
+        ]);
+
+        if (!$this->circuitBreaker->allowsRequest()) {
+            Log::warning("Circuit breaker is open for PUT {$fullUrl}", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+            ]);
+            
+            throw new ApiConnectionException(
+                "Service temporarily unavailable. Circuit breaker is open.",
+                $endpoint
+            );
+        }
+
+        try {
+            $response = $this->client()->put($fullUrl, $data);
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $statusCode = $response->status();
+            $responseSize = strlen($response->body());
+
+            if ($response->successful()) {
+                $this->circuitBreaker->recordSuccess();
+                $responseData = $response->json();
+                
+                // Log successful API response
+                Log::info("API Response: PUT {$fullUrl}", [
+                    'service' => $this->getServiceName(),
+                    'endpoint' => $endpoint,
+                    'status_code' => $statusCode,
+                    'duration_ms' => $duration,
+                    'response_size_bytes' => $responseSize,
+                    'has_data' => !empty($responseData),
+                ]);
+                
+                return ApiResponse::success(
+                    $responseData['data'] ?? $responseData,
+                    $responseData['meta'] ?? []
+                );
+            }
+
+            $this->circuitBreaker->recordFailure();
+            
+            Log::error("API Response: PUT {$fullUrl} - Error", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'status_code' => $statusCode,
+                'duration_ms' => $duration,
+                'response_preview' => substr($response->body(), 0, 500),
+            ]);
+            
+            throw new ApiException(
+                "PUT request failed with status {$statusCode}",
+                $statusCode,
+                null,
+                $endpoint,
+                ['status' => $statusCode, 'body' => $response->body()]
+            );
+        } catch (RequestException $e) {
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $this->circuitBreaker->recordFailure();
+            
+            Log::error("API Connection Error: PUT {$fullUrl}", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'message' => $e->getMessage(),
+                'duration_ms' => $duration,
+            ]);
+            
+            throw new ApiConnectionException(
+                "Failed to execute PUT request: " . $e->getMessage(),
+                $endpoint,
+                null,
+                $e
+            );
+        } catch (\Exception $e) {
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $this->circuitBreaker->recordFailure();
+            
+            Log::error("API Unexpected Error: PUT {$fullUrl}", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'exception_type' => get_class($e),
+                'message' => $e->getMessage(),
+                'duration_ms' => $duration,
+            ]);
+            
+            throw $e;
+        }
+    }
+
+    /**
+     * Sanitize parameters for logging (remove sensitive data)
+     */
+    protected function sanitizeParams(array $params): array
+    {
+        $sensitiveKeys = ['password', 'password_confirmation', 'token', 'api_key', 'secret', 'access_token', 'refresh_token'];
+        $sanitized = $params;
+        
+        foreach ($sensitiveKeys as $key) {
+            if (isset($sanitized[$key])) {
+                $sanitized[$key] = '***REDACTED***';
+            }
+        }
+        
+        return $sanitized;
     }
 
     /**

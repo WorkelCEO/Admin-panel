@@ -267,4 +267,10 @@ class AdminUserResource extends Resource
     {
         return false; // Users are created through the API, not through Filament
     }
+
+    // Hide from navigation - only show WorkelUserResource
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 }

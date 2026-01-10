@@ -45,6 +45,17 @@ class AdminLogin extends Login
                 ]);
             }
 
+            // Verify token was stored correctly
+            $storedToken = $this->adminRepository->getStoredToken();
+            \Illuminate\Support\Facades\Log::info('Admin login successful - token verification', [
+                'email' => $data['email'],
+                'token_received' => !empty($response->getToken()),
+                'token_stored' => !empty($storedToken),
+                'token_match' => $storedToken === $response->getToken(),
+                'session_has_token' => \Illuminate\Support\Facades\Session::has('admin_api_token'),
+                'cache_has_token' => \Illuminate\Support\Facades\Cache::has('admin_api_token'),
+            ]);
+
             // Store admin user info in session
             $userData = $response->getUser();
             if ($userData) {
