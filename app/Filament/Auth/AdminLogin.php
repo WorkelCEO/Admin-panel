@@ -22,6 +22,28 @@ class AdminLogin extends Login
         $data = $this->form->getState();
 
         try {
+            // Log environment details for debugging server issues
+            \Illuminate\Support\Facades\Log::debug('Admin login attempt starting', [
+                'email' => $data['email'],
+                'environment' => [
+                    'app_env' => config('app.env'),
+                    'app_url' => config('app.url'),
+                    'app_debug' => config('app.debug'),
+                    'is_https' => request()->secure(),
+                    'session_driver' => config('session.driver'),
+                    'session_secure' => config('session.secure'),
+                    'session_same_site' => config('session.same_site'),
+                    'admin_api_base_url' => config('services.admin_api.base_url'),
+                    'admin_api_verify_ssl' => config('services.admin_api.verify_ssl'),
+                ],
+                'request' => [
+                    'ip' => request()->ip(),
+                    'user_agent' => request()->userAgent(),
+                    'host' => request()->getHost(),
+                    'scheme' => request()->getScheme(),
+                ],
+            ]);
+
             $response = $this->adminRepository->login(
                 $data['email'],
                 $data['password'],
@@ -37,6 +59,13 @@ class AdminLogin extends Login
                         'success' => $response->isSuccess(),
                         'message' => $response->message,
                         'has_token' => !empty($response->getToken()),
+                        'data_keys' => is_array($response->data) ? array_keys($response->data) : [],
+                    ],
+                    'environment' => [
+                        'app_env' => config('app.env'),
+                        'app_url' => config('app.url'),
+                        'is_https' => request()->secure(),
+                        'admin_api_base_url' => config('services.admin_api.base_url'),
                     ],
                 ]);
 
@@ -91,18 +120,34 @@ class AdminLogin extends Login
             throw $e;
         } catch (\App\Exceptions\ApiException $e) {
             \Illuminate\Support\Facades\Log::error('Admin API error during login', [
-                'email' => $data['email'],
+                'email' => $data['email'] ?? 'unknown',
                 'error' => $e->getMessage(),
                 'endpoint' => $e->getEndpoint(),
                 'context' => $e->getContext(),
+                'exception_type' => get_class($e),
+                'environment' => [
+                    'app_env' => config('app.env'),
+                    'app_url' => config('app.url'),
+                    'is_https' => request()->secure(),
+                    'admin_api_base_url' => config('services.admin_api.base_url'),
+                    'admin_api_verify_ssl' => config('services.admin_api.verify_ssl'),
+                ],
+                'session_config' => [
+                    'driver' => config('session.driver'),
+                    'secure' => config('session.secure'),
+                    'same_site' => config('session.same_site'),
+                    'domain' => config('session.domain'),
+                ],
             ]);
 
             $errorMessage = 'Unable to connect to the Admin API. Please check your configuration or try again later.';
             
             if ($e instanceof \App\Exceptions\ApiConnectionException) {
-                $errorMessage = 'Connection failed. Please check if the Admin API is accessible.';
+                $errorMessage = 'Connection failed. Please check if the Admin API is accessible. Verify ADMIN_API_BASE_URL is correct.';
             } elseif ($e instanceof \App\Exceptions\ApiTimeoutException) {
                 $errorMessage = 'Request timed out. Please try again.';
+            } elseif ($e instanceof \App\Exceptions\ApiNotFoundException) {
+                $errorMessage = 'Login endpoint not found. Please verify ADMIN_API_BASE_URL configuration.';
             }
 
             throw ValidationException::withMessages([
@@ -110,9 +155,18 @@ class AdminLogin extends Login
             ]);
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Unexpected error during admin login', [
-                'email' => $data['email'],
+                'email' => $data['email'] ?? 'unknown',
                 'error' => $e->getMessage(),
+                'exception_type' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
+                'environment' => [
+                    'app_env' => config('app.env'),
+                    'app_url' => config('app.url'),
+                    'is_https' => request()->secure(),
+                    'php_version' => PHP_VERSION,
+                ],
             ]);
 
             throw ValidationException::withMessages([

@@ -98,16 +98,41 @@ class AdminApiService extends BaseApiService
             // Don't use token for login endpoint
             $response = $this->postWithoutToken('/auth/login', $data);
             
+            // Log detailed response structure for debugging
+            $responseDataForLog = $response->data;
+            if (is_array($responseDataForLog)) {
+                // Sanitize token for logging
+                if (isset($responseDataForLog['token'])) {
+                    $responseDataForLog['token'] = substr($responseDataForLog['token'], 0, 20) . '...';
+                }
+                if (isset($responseDataForLog['user']['token'])) {
+                    $responseDataForLog['user']['token'] = substr($responseDataForLog['user']['token'], 0, 20) . '...';
+                }
+            }
+            
             \Illuminate\Support\Facades\Log::debug('Admin login API response', [
                 'success' => $response->isSuccess(),
                 'has_data' => !empty($response->data),
+                'data_type' => gettype($response->data),
+                'data_keys' => is_array($response->data) ? array_keys($response->data) : [],
                 'has_token' => !empty($response->data['token'] ?? null),
+                'has_token_in_user' => !empty($response->data['user']['token'] ?? null),
+                'response_data' => $responseDataForLog,
             ]);
             
             $authResponse = AdminAuthResponse::fromApiResponse([
                 'data' => $response->data,
                 'success' => $response->success,
                 'message' => $response->message,
+            ]);
+            
+            // Log what we extracted
+            \Illuminate\Support\Facades\Log::debug('AdminAuthResponse created', [
+                'success' => $authResponse->isSuccess(),
+                'has_token' => !empty($authResponse->getToken()),
+                'has_user' => !empty($authResponse->getUser()),
+                'token_preview' => $authResponse->getToken() ? substr($authResponse->getToken(), 0, 20) . '...' : null,
+                'data_structure' => is_array($authResponse->data) ? array_keys($authResponse->data) : [],
             ]);
 
             // Store token if login successful
@@ -175,8 +200,17 @@ class AdminApiService extends BaseApiService
             ])->timeout($this->timeout);
             
             // Disable SSL verification in development if configured
-            if (config('services.admin_api.verify_ssl', true) === false || env('ADMIN_API_VERIFY_SSL', 'true') === 'false') {
+            $verifySsl = config('services.admin_api.verify_ssl', true);
+            $envVerifySsl = env('ADMIN_API_VERIFY_SSL', 'true');
+            
+            // Handle boolean and string values
+            if ($verifySsl === false || $verifySsl === 'false' || 
+                ($envVerifySsl !== null && ($envVerifySsl === false || $envVerifySsl === 'false'))) {
                 $client = $client->withoutVerifying();
+                Log::debug("SSL verification disabled for POST {$fullUrl}", [
+                    'verify_ssl_config' => $verifySsl,
+                    'verify_ssl_env' => $envVerifySsl,
+                ]);
             }
             
             $response = $client->post($fullUrl, $data);
@@ -188,6 +222,78 @@ class AdminApiService extends BaseApiService
                 $this->circuitBreaker->recordSuccess();
                 $responseData = $response->json();
                 
+                // Log the actual response structure for debugging (sanitize sensitive data)
+                $logData = $responseData;
+                if (isset($logData['data']['token'])) {
+                    $logData['data']['token'] = substr($logData['data']['token'], 0, 20) . '...';
+                }
+                if (isset($logData['token'])) {
+                    $logData['token'] = substr($logData['token'], 0, 20) . '...';
+                }
+                
+                Log::debug("API Response structure: POST {$fullUrl}", [
+                    'service' => $this->getServiceName(),
+                    'endpoint' => $endpoint,
+                    'response_keys' => array_keys($responseData ?? []),
+                    'response_structure' => $logData,
+                    'raw_body_preview' => substr($response->body(), 0, 500),
+                ]);
+                
+                // Handle different Admin API response formats
+                // Format 1: { success: true, data: { token: "...", user: {...} } }
+                // Format 2: { token: "...", user: {...} } (data at root level)
+                // Format 3: { success: true, message: "...", token: "...", user: {...} }
+                
+                $data = [];
+                $meta = [];
+                $success = true;
+                $message = null;
+                
+                // Extract success and message first
+                $success = $responseData['success'] ?? true;
+                $message = $responseData['message'] ?? null;
+                
+                // Check if data is in 'data' wrapper (most common format)
+                if (isset($responseData['data'])) {
+                    if (is_array($responseData['data'])) {
+                        $data = $responseData['data'];
+                    } else {
+                        // If data is not an array, wrap it
+                        $data = ['value' => $responseData['data']];
+                    }
+                    $meta = $responseData['meta'] ?? [];
+                } 
+                // Check if token/user/auth fields are at root level (direct response)
+                elseif (isset($responseData['token']) || isset($responseData['user']) || isset($responseData['auth'])) {
+                    // Extract auth-related fields at root level
+                    $data = [];
+                    if (isset($responseData['token'])) $data['token'] = $responseData['token'];
+                    if (isset($responseData['token_type'])) $data['token_type'] = $responseData['token_type'];
+                    if (isset($responseData['expires_at'])) $data['expires_at'] = $responseData['expires_at'];
+                    if (isset($responseData['expires_in'])) $data['expires_at'] = now()->addSeconds($responseData['expires_in'])->toIso8601String();
+                    if (isset($responseData['user'])) $data['user'] = $responseData['user'];
+                    if (isset($responseData['auth'])) {
+                        if (is_array($responseData['auth'])) {
+                            $data = array_merge($data, $responseData['auth']);
+                        } else {
+                            $data['auth'] = $responseData['auth'];
+                        }
+                    }
+                    // Include any other fields that might be useful
+                    foreach (['name', 'email', 'id', 'role'] as $field) {
+                        if (isset($responseData[$field]) && !isset($data[$field])) {
+                            if (!isset($data['user'])) $data['user'] = [];
+                            $data['user'][$field] = $responseData[$field];
+                        }
+                    }
+                }
+                // Fallback: use entire response as data (filter out metadata fields)
+                else {
+                    $data = $responseData;
+                    // Remove metadata fields to keep only actual data
+                    unset($data['success'], $data['message'], $data['meta'], $data['status'], $data['code']);
+                }
+                
                 // Log successful response
                 Log::info("API Response: POST {$fullUrl} (without token) - Success", [
                     'service' => $this->getServiceName(),
@@ -195,18 +301,11 @@ class AdminApiService extends BaseApiService
                     'status_code' => $statusCode,
                     'duration_ms' => $duration,
                     'response_size_bytes' => $responseSize,
-                    'success' => $responseData['success'] ?? true,
-                    'has_token' => !empty($responseData['data']['token'] ?? null),
-                    'has_data' => !empty($responseData['data']),
+                    'success' => $success,
+                    'has_token' => !empty($data['token'] ?? null),
+                    'has_data' => !empty($data),
+                    'data_keys' => is_array($data) ? array_keys($data) : [],
                 ]);
-                
-                // Handle Admin API response format
-                $data = $responseData['data'] ?? $responseData;
-                $meta = $responseData['meta'] ?? [];
-                
-                // If response has success field, use it
-                $success = $responseData['success'] ?? true;
-                $message = $responseData['message'] ?? null;
                 
                 if (!$success) {
                     return ApiResponse::failure($message, $data, $meta);

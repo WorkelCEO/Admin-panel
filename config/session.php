@@ -169,7 +169,9 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    'secure' => env('SESSION_SECURE_COOKIE') !== null 
+        ? (bool) env('SESSION_SECURE_COOKIE')
+        : (strpos(env('APP_URL', 'http://localhost'), 'https://') === 0),
 
     /*
     |--------------------------------------------------------------------------

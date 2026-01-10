@@ -70,8 +70,16 @@ abstract class BaseApiService
         
         // Disable SSL verification if configured (development only)
         $verifySsl = config('services.' . $this->getServiceName() . '.verify_ssl', true);
-        if ($verifySsl === false || (is_string($verifySsl) && $verifySsl === 'false')) {
+        $envVerifySsl = env(strtoupper($this->getServiceName()) . '_VERIFY_SSL', null);
+        
+        // Handle boolean and string values for SSL verification
+        if ($verifySsl === false || $verifySsl === 'false' || 
+            ($envVerifySsl !== null && ($envVerifySsl === false || $envVerifySsl === 'false'))) {
             $client = $client->withoutVerifying();
+            Log::debug("SSL verification disabled for {$this->getServiceName()}", [
+                'verify_ssl_config' => $verifySsl,
+                'verify_ssl_env' => $envVerifySsl,
+            ]);
         }
 
         return $client;
