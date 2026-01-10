@@ -15,6 +15,11 @@ class RevenueChart extends ChartWidget
 
     protected function getData(): array
     {
+        // TODO: Update to use Admin API instead of direct database queries
+        // This widget needs aggregated revenue data (sum grouped by date) which may require
+        // a statistics endpoint from the API
+        // For now, using database directly as a temporary solution
+        
         // Query the revenue data for the last 30 days
         $revenues = WorkelUser::selectRaw('DATE(created_at) as date, SUM(subscription_payment_amount) as total_revenue')
             ->where('created_at', '>=', now()->subDays(30))

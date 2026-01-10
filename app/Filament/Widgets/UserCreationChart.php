@@ -14,6 +14,11 @@ class UserCreationChart extends ChartWidget
 
     protected function getData(): array
     {
+        // TODO: Update to use Admin API instead of direct database queries
+        // This widget needs aggregated data (grouped by date) which may require
+        // a statistics endpoint from the API, or fetching all data and aggregating client-side
+        // For now, using database directly as a temporary solution
+        
         // Get data for the last 30 days, excluding admin users
         $startDate = now()->subDays(30)->startOfDay();
         

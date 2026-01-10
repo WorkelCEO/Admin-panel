@@ -14,6 +14,11 @@ class SubscribsStatesChart extends ChartWidget
     protected int | string | array $columnSpan = '3';
     protected function getData(): array
     {
+        // TODO: Update to use Admin API instead of direct database queries
+        // This widget needs aggregated data (grouped by date) which may require
+        // a statistics endpoint from the API
+        // For now, using database directly as a temporary solution
+        
         // Get data for the last 30 days
         $users = WorkelUser::selectRaw('DATE(created_at) as date, COUNT(*) as count')
             ->groupBy('date')
