@@ -48,6 +48,8 @@ class AdminActivityLogService extends BaseApiService
                     'per_page' => 15,
                     'total' => 0,
                     'last_page' => 1,
+                    'from' => null,
+                    'to' => null,
                 ],
             ];
         }
@@ -71,6 +73,8 @@ class AdminActivityLogService extends BaseApiService
                     'per_page' => 15,
                     'total' => 0,
                     'last_page' => 1,
+                    'from' => null,
+                    'to' => null,
                 ],
             ];
         }

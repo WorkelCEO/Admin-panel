@@ -7,6 +7,7 @@ use App\DTOs\EmailLogStatisticsResponse;
 use App\Exceptions\ApiException;
 use App\Exceptions\ApiNotFoundException;
 use App\Models\EmailLog;
+use App\Services\Concerns\HandlesApiPagination;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Log;
  */
 class EmailLogsClientApiService extends BaseApiService
 {
+    use HandlesApiPagination;
     protected function getBaseUrl(): string
     {
         return config('services.email_logs_api.client.base_url');
@@ -42,19 +44,17 @@ class EmailLogsClientApiService extends BaseApiService
         try {
             $response = $this->get('/admin/email-logs', $params, 30); // Cache for 30 seconds
             
-            $emailLogListResponse = EmailLogListResponse::fromApiResponse([
-                'data' => $response->data,
-                'meta' => $response->meta,
-            ]);
+            // Use standardized pagination extraction
+            $paginatedData = $this->extractPaginatedData($response);
+            
+            // Convert API data items to EmailLog models
+            $emailLogs = collect($paginatedData['data'])->map(function ($item) {
+                return EmailLog::fromApi($item);
+            })->all();
 
             return [
-                'data' => $emailLogListResponse->getEmailLogs(),
-                'meta' => [
-                    'total' => $emailLogListResponse->getTotal(),
-                    'per_page' => $emailLogListResponse->getPerPage(),
-                    'current_page' => $emailLogListResponse->getCurrentPage(),
-                    'last_page' => $emailLogListResponse->getLastPage(),
-                ],
+                'data' => $emailLogs,
+                'meta' => $paginatedData['meta'],
             ];
         } catch (ApiException $e) {
             Log::error('Failed to fetch email logs (Client)', [
@@ -65,7 +65,14 @@ class EmailLogsClientApiService extends BaseApiService
 
             return [
                 'data' => [],
-                'meta' => [],
+                'meta' => [
+                    'current_page' => 1,
+                    'per_page' => 15,
+                    'total' => 0,
+                    'last_page' => 1,
+                    'from' => null,
+                    'to' => null,
+                ],
             ];
         }
     }

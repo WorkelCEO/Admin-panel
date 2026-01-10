@@ -181,10 +181,20 @@ abstract class BaseApiService
                 if ($response->successful()) {
                     $this->circuitBreaker->recordSuccess();
                     
-                    $data = $response->json();
+                    $responseJson = $response->json();
+                    $responseMessage = $responseJson['message'] ?? null;
+                    
+                    // Extract data according to API response structure:
+                    // { success: true, data: { current_page, data: [...], total, ... } } for paginated
+                    // { success: true, data: {...} } for non-paginated
+                    $responseData = $responseJson['data'] ?? $responseJson;
+                    
+                    // For paginated responses, the entire pagination object is in 'data'
+                    // For non-paginated responses, 'data' contains the actual response data
                     $apiResponse = ApiResponse::success(
-                        $data['data'] ?? $data,
-                        $data['meta'] ?? []
+                        $responseData,
+                        [], // API doesn't use 'meta' field - pagination is in 'data' object
+                        $responseMessage
                     );
 
                     // Log successful API response
@@ -195,9 +205,11 @@ abstract class BaseApiService
                         'duration_ms' => $duration,
                         'response_size_bytes' => $responseSize,
                         'attempt' => $attempt + 1,
-                        'has_data' => !empty($data),
-                        'data_count' => is_array($data['data'] ?? $data) ? count($data['data'] ?? $data) : 0,
-                        'pagination' => isset($data['meta']) || isset($data['current_page']),
+                        'has_data' => !empty($responseData),
+                        'is_paginated' => isset($responseData['data']) && isset($responseData['current_page']),
+                        'data_count' => isset($responseData['data']) && is_array($responseData['data']) 
+                            ? count($responseData['data']) 
+                            : (is_array($responseData) ? count($responseData) : 0),
                     ]);
 
                     // Cache successful response
@@ -460,7 +472,12 @@ abstract class BaseApiService
 
             if ($response->successful()) {
                 $this->circuitBreaker->recordSuccess();
-                $responseData = $response->json();
+                $responseJson = $response->json();
+                $responseMessage = $responseJson['message'] ?? null;
+                
+                // Extract data according to API response structure
+                // { success: true, message: "...", data: {...} }
+                $responseData = $responseJson['data'] ?? $responseJson;
                 
                 // Log successful API response
                 Log::info("API Response: POST {$fullUrl}", [
@@ -473,8 +490,9 @@ abstract class BaseApiService
                 ]);
                 
                 return ApiResponse::success(
-                    $responseData['data'] ?? $responseData,
-                    $responseData['meta'] ?? []
+                    $responseData,
+                    [], // API doesn't use 'meta' field
+                    $responseMessage
                 );
             }
 
@@ -656,7 +674,12 @@ abstract class BaseApiService
 
             if ($response->successful()) {
                 $this->circuitBreaker->recordSuccess();
-                $responseData = $response->json();
+                $responseJson = $response->json();
+                $responseMessage = $responseJson['message'] ?? null;
+                
+                // Extract data according to API response structure
+                // { success: true, message: "...", data: {...} }
+                $responseData = $responseJson['data'] ?? $responseJson;
                 
                 // Log successful API response
                 Log::info("API Response: PUT {$fullUrl}", [
@@ -669,8 +692,9 @@ abstract class BaseApiService
                 ]);
                 
                 return ApiResponse::success(
-                    $responseData['data'] ?? $responseData,
-                    $responseData['meta'] ?? []
+                    $responseData,
+                    [], // API doesn't use 'meta' field
+                    $responseMessage
                 );
             }
 

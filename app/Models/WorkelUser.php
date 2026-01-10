@@ -19,6 +19,7 @@ class WorkelUser extends Model
         'phone',
         'address',
         'role',
+        'system_role',
         'status',
         'subscription_type',
         'subscription_start_date',
@@ -37,6 +38,17 @@ class WorkelUser extends Model
         'external_id',
         'source',
         'email_verified_at',
+    ];
+    
+    // Additional attributes that may come from API but aren't in fillable
+    protected $casts = [
+        'is_super_admin' => 'boolean',
+        'email_verified_at' => 'datetime',
+        'last_seen' => 'datetime',
+        'suspended_at' => 'datetime',
+        'suspended_until' => 'datetime',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
 

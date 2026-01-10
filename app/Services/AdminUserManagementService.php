@@ -37,7 +37,9 @@ class AdminUserManagementService extends BaseApiService
     public function getUsers(array $params = []): array
     {
         try {
-            $response = $this->get('/users', $params, 0); // Don't cache for sync operations
+            // Disable caching for paginated requests to ensure fresh data
+            // Pass null instead of 0 to completely disable caching
+            $response = $this->get('/users', $params, null);
             
             // Use standardized pagination extraction
             return $this->extractPaginatedData($response);
@@ -56,6 +58,8 @@ class AdminUserManagementService extends BaseApiService
                     'per_page' => 15,
                     'total' => 0,
                     'last_page' => 1,
+                    'from' => null,
+                    'to' => null,
                 ],
             ];
         }

@@ -245,7 +245,6 @@ class AdminApiService extends BaseApiService
                 // Format 3: { success: true, message: "...", token: "...", user: {...} }
                 
                 $data = [];
-                $meta = [];
                 $success = true;
                 $message = null;
                 
@@ -261,7 +260,6 @@ class AdminApiService extends BaseApiService
                         // If data is not an array, wrap it
                         $data = ['value' => $responseData['data']];
                     }
-                    $meta = $responseData['meta'] ?? [];
                 } 
                 // Check if token/user/auth fields are at root level (direct response)
                 elseif (isset($responseData['token']) || isset($responseData['user']) || isset($responseData['auth'])) {
@@ -308,10 +306,10 @@ class AdminApiService extends BaseApiService
                 ]);
                 
                 if (!$success) {
-                    return ApiResponse::failure($message, $data, $meta);
+                    return ApiResponse::failure($message, $data, []);
                 }
                 
-                return ApiResponse::success($data, $meta, $message);
+                return ApiResponse::success($data, [], $message);
             }
 
             $this->circuitBreaker->recordFailure();

@@ -69,11 +69,11 @@ class ListEmailLogs extends ListRecords
         // Fetch data from API
             $response = $this->repository->getEmailLogs('app', $params);
 
-        // Create a custom paginator
-        $meta = $response['meta'];
+        // Create a custom paginator using API pagination metadata
+        $meta = $response['meta'] ?? [];
         
         return new \Illuminate\Pagination\LengthAwarePaginator(
-            $response['data'],
+            $response['data'] ?? [],
             $meta['total'] ?? 0,
             $meta['per_page'] ?? $perPage,
             $meta['current_page'] ?? $page,
