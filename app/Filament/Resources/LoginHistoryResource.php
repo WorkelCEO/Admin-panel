@@ -111,6 +111,19 @@ class LoginHistoryResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->copyable(),
+                Tables\Columns\TextColumn::make('action')
+                    ->label('Action')
+                    ->searchable()
+                    ->sortable()
+                    ->badge()
+                    ->color(fn (?string $state): string => match ($state) {
+                        'login' => 'success',
+                        'logout' => 'warning',
+                        'register' => 'info',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (?string $state): string => $state ? ucfirst($state) : 'N/A')
+                    ->placeholder('N/A'),
                 Tables\Columns\TextColumn::make('ip_address')
                     ->label('IP Address')
                     ->searchable()

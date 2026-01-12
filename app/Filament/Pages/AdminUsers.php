@@ -13,7 +13,9 @@ class AdminUsers extends Page
 
     protected string $view = 'filament.pages.admin-users';
 
-    protected static ?string $navigationLabel = 'Users';
+    protected static ?string $navigationLabel = 'Dev Users';
+
+    protected static ?string $title = 'Dev Users';
 
     protected static ?int $navigationSort = 10;
 
