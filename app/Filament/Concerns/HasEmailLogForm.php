@@ -3,17 +3,16 @@
 namespace App\Filament\Concerns;
 
 use Filament\Forms;
-use Filament\Forms\Form;
+use Filament\Schemas\Schema;
 
 /**
  * Shared form configuration for Email Log resources
  */
 trait HasEmailLogForm
 {
-    public static function emailLogForm(Form $form): Form
+    public static function emailLogForm(Schema $schema): Schema
     {
-        return $form
-            ->schema([
+        return $schema->components([
                 Forms\Components\Section::make('Email Information')
                     ->schema([
                         Forms\Components\TextInput::make('sender_email')

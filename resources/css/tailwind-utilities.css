@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+
+@import '../../vendor/filament/filament/resources/css/index.css';
+@import '../../vendor/filament/support/resources/css/index.css';
+@import '../../vendor/filament/actions/resources/css/index.css';
+@import '../../vendor/filament/forms/resources/css/index.css';
+@import '../../vendor/filament/infolists/resources/css/index.css';
+@import '../../vendor/filament/notifications/resources/css/index.css';
+@import '../../vendor/filament/schemas/resources/css/index.css';
+@import '../../vendor/filament/tables/resources/css/index.css';
+@import '../../vendor/filament/widgets/resources/css/index.css';
+
+/* Ensure Filament sidebar and navigation styles are preserved */
+@layer base {
+    /* Preserve sidebar background */
+    [class*="fi-sidebar"],
+    [class*="fi-sidebar"] * {
+        background-color: inherit;
+    }
+    
+    /* Preserve navigation styles */
+    [class*="fi-nav"],
+    [class*="fi-nav"] * {
+        background-color: inherit;
+    }
+}
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+@source '../**/*.vue';

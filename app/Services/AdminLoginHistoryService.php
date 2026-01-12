@@ -237,4 +237,25 @@ class AdminLoginHistoryService extends BaseApiService
 
         return $client;
     }
+
+    /**
+     * Handle unauthorized (401) response by logging out the user
+     */
+    protected function handleUnauthorized(string $endpoint, array $responseData = []): bool
+    {
+        // Don't logout on auth endpoints
+        if (str_contains($endpoint, '/auth/login') || str_contains($endpoint, '/auth/refresh')) {
+            return false;
+        }
+
+        Log::warning("API Unauthorized: Logging out user due to 401 error", [
+            'service' => $this->getServiceName(),
+            'endpoint' => $endpoint,
+        ]);
+
+        $adminApiService = app(AdminApiService::class);
+        $adminApiService->logoutUser();
+
+        return false;
+    }
 }

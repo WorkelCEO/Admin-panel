@@ -15,13 +15,13 @@ class Settings extends Page
 {
     use InteractsWithForms;
 
-    protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-cog-6-tooth';
 
-    protected static string $view = 'filament.pages.settings';
+    protected string $view = 'filament.pages.settings';
 
     protected static ?string $navigationLabel = 'Settings';
 
-    protected static ?string $navigationGroup = 'System';
+    protected static \UnitEnum|string|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 40;
 

@@ -4,8 +4,9 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\AdminUserResource\Pages;
 use App\Repositories\AdminRepository;
+use Filament\Actions;
 use Filament\Forms;
-use Filament\Forms\Form;
+use Filament\Schemas\Schema;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -15,7 +16,7 @@ class AdminUserResource extends Resource
 {
     protected static ?string $model = null; // Not using Eloquent model
 
-    protected static ?string $navigationIcon = 'heroicon-o-users';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-users';
 
     /**
      * Override to prevent Filament from trying to use Eloquent queries
@@ -39,14 +40,13 @@ class AdminUserResource extends Resource
 
     protected static ?string $pluralLabel = 'Users';
 
-    protected static ?string $navigationGroup = 'Administration';
+    protected static \UnitEnum|string|null $navigationGroup = 'Administration';
 
     protected static ?int $navigationSort = 1;
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form
-            ->schema([
+        return $schema->components([
                 Forms\Components\Section::make('User Information')
                     ->schema([
                         Forms\Components\TextInput::make('name')
@@ -134,9 +134,12 @@ class AdminUserResource extends Resource
                     ]),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\Action::make('change_role')
+                Actions\ViewAction::make(),
+                Actions\Action::make('edit')
+                    ->label('Edit')
+                    ->icon('heroicon-o-pencil')
+                    ->url(fn ($record) => static::getUrl('edit', ['record' => $record->getKey() ?? $record['id']])),
+                Actions\Action::make('change_role')
                     ->label('Change Role')
                     ->icon('heroicon-o-shield-check')
                     ->form([
@@ -166,7 +169,7 @@ class AdminUserResource extends Resource
                                 ->send();
                         }
                     }),
-                Tables\Actions\Action::make('suspend')
+                Actions\Action::make('suspend')
                     ->label('Suspend')
                     ->icon('heroicon-o-lock-closed')
                     ->color('warning')
@@ -200,7 +203,7 @@ class AdminUserResource extends Resource
                                 ->send();
                         }
                     }),
-                Tables\Actions\Action::make('unsuspend')
+                Actions\Action::make('unsuspend')
                     ->label('Unsuspend')
                     ->icon('heroicon-o-lock-open')
                     ->color('success')
@@ -222,7 +225,7 @@ class AdminUserResource extends Resource
                                 ->send();
                         }
                     }),
-                Tables\Actions\DeleteAction::make()
+                Actions\DeleteAction::make()
                     ->requiresConfirmation()
                     ->action(function ($record) {
                         $repository = app(AdminRepository::class);
@@ -268,9 +271,8 @@ class AdminUserResource extends Resource
         return false; // Users are created through the API, not through Filament
     }
 
-    // Hide from navigation - only show WorkelUserResource
     public static function shouldRegisterNavigation(): bool
     {
-        return false;
+        return true;
     }
 }

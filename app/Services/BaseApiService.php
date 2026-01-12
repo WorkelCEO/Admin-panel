@@ -50,6 +50,21 @@ abstract class BaseApiService
     abstract protected function getServiceName(): string;
 
     /**
+     * Handle unauthorized (401) response
+     * Can be overridden by child classes to implement token refresh logic
+     * 
+     * @param string $endpoint The endpoint that returned 401
+     * @param array $responseData The response data from the API
+     * @return bool True if the issue was resolved (e.g., token refreshed), false otherwise
+     */
+    protected function handleUnauthorized(string $endpoint, array $responseData = []): bool
+    {
+        // Default implementation: cannot resolve unauthorized
+        // Child classes can override to attempt token refresh
+        return false;
+    }
+
+    /**
      * Get HTTP client with authentication headers
      * Can be overridden by child classes
      */
@@ -121,6 +136,27 @@ abstract class BaseApiService
                 'cache_has_token' => $cacheToken,
                 'token_from_getToken' => empty($token) ? 'NULL' : 'SET',
             ]);
+            
+            // Try to handle missing token (e.g., retrieve from storage or refresh)
+            if ($this->handleUnauthorized($endpoint, [])) {
+                // Token was retrieved/refreshed, get it again
+                $token = $this->getToken();
+                if (!empty($token)) {
+                    Log::info("API Request: GET {$fullUrl} - Token retrieved, proceeding with request", [
+                        'service' => $this->getServiceName(),
+                        'endpoint' => $endpoint,
+                    ]);
+                }
+            } else {
+                // Could not retrieve token, throw exception
+                throw new \App\Exceptions\ApiException(
+                    "Authentication token is missing. Please log in again.",
+                    401,
+                    null,
+                    $endpoint,
+                    ['status' => 401, 'requires_auth' => true, 'token_missing' => true]
+                );
+            }
         }
 
         // Check circuit breaker
@@ -255,6 +291,18 @@ abstract class BaseApiService
                         'response_message' => $responseData['message'] ?? 'Unauthenticated',
                         'response_body' => substr($responseBody, 0, 500),
                     ]);
+                    
+                    // Try to handle unauthorized (e.g., refresh token)
+                    // Only attempt on first try to avoid infinite loops
+                    if ($attempt === 0 && $this->handleUnauthorized($endpoint, $responseData)) {
+                        Log::info("API Response: GET {$fullUrl} - Unauthorized handled, retrying request", [
+                            'service' => $this->getServiceName(),
+                            'endpoint' => $endpoint,
+                            'attempt' => $attempt + 1,
+                        ]);
+                        // Retry the request with new token
+                        continue;
+                    }
                     
                     throw new \App\Exceptions\ApiException(
                         "Unauthenticated. Please log in again.",
@@ -496,6 +544,47 @@ abstract class BaseApiService
                 );
             }
 
+            // Handle 401 Unauthorized
+            if ($statusCode === 401) {
+                $this->circuitBreaker->recordSuccess(); // 401 is not a service failure
+                
+                $responseData = [];
+                try {
+                    $responseData = $response->json() ?? [];
+                } catch (\Exception $e) {
+                    // If JSON parsing fails, use empty array
+                }
+                
+                $token = $this->getToken();
+                Log::warning("API Response: POST {$fullUrl} - Unauthenticated (401)", [
+                    'service' => $this->getServiceName(),
+                    'endpoint' => $endpoint,
+                    'status_code' => 401,
+                    'duration_ms' => $duration,
+                    'has_token' => !empty($token),
+                    'token_preview' => $token ? substr($token, 0, 20) . '...' : null,
+                    'response_message' => $responseData['message'] ?? 'Unauthenticated',
+                ]);
+                
+                // Try to handle unauthorized (e.g., refresh token)
+                if ($this->handleUnauthorized($endpoint, $responseData)) {
+                    Log::info("API Response: POST {$fullUrl} - Unauthorized handled, retrying request", [
+                        'service' => $this->getServiceName(),
+                        'endpoint' => $endpoint,
+                    ]);
+                    // Retry the request with new token
+                    return $this->post($endpoint, $data);
+                }
+                
+                throw new ApiException(
+                    "Unauthenticated. Please log in again.",
+                    $statusCode,
+                    null,
+                    $endpoint,
+                    ['status' => 401, 'body' => $response->body(), 'requires_auth' => true]
+                );
+            }
+
             $this->circuitBreaker->recordFailure();
             
             Log::error("API Response: POST {$fullUrl} - Error", [
@@ -695,6 +784,47 @@ abstract class BaseApiService
                     $responseData,
                     [], // API doesn't use 'meta' field
                     $responseMessage
+                );
+            }
+
+            // Handle 401 Unauthorized
+            if ($statusCode === 401) {
+                $this->circuitBreaker->recordSuccess(); // 401 is not a service failure
+                
+                $responseData = [];
+                try {
+                    $responseData = $response->json() ?? [];
+                } catch (\Exception $e) {
+                    // If JSON parsing fails, use empty array
+                }
+                
+                $token = $this->getToken();
+                Log::warning("API Response: PUT {$fullUrl} - Unauthenticated (401)", [
+                    'service' => $this->getServiceName(),
+                    'endpoint' => $endpoint,
+                    'status_code' => 401,
+                    'duration_ms' => $duration,
+                    'has_token' => !empty($token),
+                    'token_preview' => $token ? substr($token, 0, 20) . '...' : null,
+                    'response_message' => $responseData['message'] ?? 'Unauthenticated',
+                ]);
+                
+                // Try to handle unauthorized (e.g., refresh token)
+                if ($this->handleUnauthorized($endpoint, $responseData)) {
+                    Log::info("API Response: PUT {$fullUrl} - Unauthorized handled, retrying request", [
+                        'service' => $this->getServiceName(),
+                        'endpoint' => $endpoint,
+                    ]);
+                    // Retry the request with new token
+                    return $this->put($endpoint, $data);
+                }
+                
+                throw new ApiException(
+                    "Unauthenticated. Please log in again.",
+                    $statusCode,
+                    null,
+                    $endpoint,
+                    ['status' => 401, 'body' => $response->body(), 'requires_auth' => true]
                 );
             }
 

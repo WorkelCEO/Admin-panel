@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Cache;
 
 class ApiConnectionStatusWidget extends Widget
 {
-    protected static string $view = 'filament.widgets.api-connection-status-widget';
+    protected string $view = 'filament.widgets.api-connection-status-widget';
     
     protected int | string | array $columnSpan = 'full';
 

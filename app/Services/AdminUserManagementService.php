@@ -213,6 +213,28 @@ class AdminUserManagementService extends BaseApiService
     }
 
     /**
+     * Handle unauthorized (401) response by logging out the user
+     */
+    protected function handleUnauthorized(string $endpoint, array $responseData = []): bool
+    {
+        // Don't logout on auth endpoints
+        if (str_contains($endpoint, '/auth/login') || str_contains($endpoint, '/auth/refresh')) {
+            return false;
+        }
+
+        \Illuminate\Support\Facades\Log::warning("API Unauthorized: Logging out user due to 401 error", [
+            'service' => $this->getServiceName(),
+            'endpoint' => $endpoint,
+        ]);
+
+        // Get AdminApiService to handle logout
+        $adminApiService = app(AdminApiService::class);
+        $adminApiService->logoutUser();
+
+        return false;
+    }
+
+    /**
      * PUT method is inherited from BaseApiService with full logging
      * No override needed - uses parent::put() which includes comprehensive logging
      */

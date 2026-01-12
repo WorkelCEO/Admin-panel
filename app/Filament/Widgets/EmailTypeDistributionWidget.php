@@ -7,11 +7,11 @@ use Filament\Widgets\ChartWidget;
 
 class EmailTypeDistributionWidget extends ChartWidget
 {
-    protected static ?string $heading = 'Email Types Distribution - App API (Last 30 Days)';
+    protected ?string $heading = 'Email Types Distribution - App API (Last 30 Days)';
 
     protected static ?int $sort = 2;
 
-    protected static ?string $pollingInterval = null;
+    protected ?string $pollingInterval = null;
 
     protected int | string | array $columnSpan = 'full';
 

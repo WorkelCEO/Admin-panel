@@ -7,7 +7,8 @@ use App\Filament\Concerns\HasEmailLogTable;
 use App\Filament\Resources\EmailLogResource\Pages;
 use App\Models\EmailLog;
 use App\Repositories\EmailLogRepository;
-use Filament\Forms\Form;
+use Filament\Actions;
+use Filament\Schemas\Schema;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -20,27 +21,27 @@ class EmailLogResource extends Resource
 
     protected static ?string $model = EmailLog::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-envelope';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-envelope';
 
     protected static ?string $navigationLabel = 'Email Logs (App)';
 
     protected static ?string $pluralLabel = 'Email Logs (App)';
 
-    protected static ?string $navigationGroup = 'System';
+    protected static \UnitEnum|string|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 10;
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return self::emailLogForm($form);
+        return self::emailLogForm($schema);
     }
 
     public static function table(Table $table): Table
     {
         return self::emailLogTable($table)
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\DeleteAction::make()
+                Actions\ViewAction::make(),
+                Actions\DeleteAction::make()
                     ->requiresConfirmation()
                     ->action(function (EmailLog $record) {
                         $repository = app(EmailLogRepository::class);

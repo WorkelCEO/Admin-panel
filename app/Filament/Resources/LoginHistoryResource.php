@@ -4,8 +4,9 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\LoginHistoryResource\Pages;
 use App\Repositories\AdminRepository;
+use Filament\Actions;
 use Filament\Forms;
-use Filament\Forms\Form;
+use Filament\Schemas\Schema;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -17,13 +18,13 @@ class LoginHistoryResource extends Resource
 {
     protected static ?string $model = \App\Models\User::class; // Dummy model for Filament
 
-    protected static ?string $navigationIcon = 'heroicon-o-clock';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-clock';
 
     protected static ?string $navigationLabel = 'Login History';
 
     protected static ?string $pluralLabel = 'Login History';
 
-    protected static ?string $navigationGroup = 'Administration';
+    protected static \UnitEnum|string|null $navigationGroup = 'Administration';
 
     protected static ?int $navigationSort = 2;
 
@@ -43,10 +44,9 @@ class LoginHistoryResource extends Resource
         return \App\Models\User::class;
     }
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form
-            ->schema([
+        return $schema->components([
                 // Read-only form since this is API data
                 Forms\Components\Section::make('Login History Information')
                     ->schema([
@@ -202,7 +202,7 @@ class LoginHistoryResource extends Resource
                     ]),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
+                Actions\ViewAction::make()
                     ->url(function ($record) {
                         // Get record data as array
                         $recordData = is_object($record) && method_exists($record, 'getAttributes') 

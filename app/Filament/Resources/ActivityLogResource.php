@@ -4,8 +4,9 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ActivityLogResource\Pages;
 use App\Repositories\AdminRepository;
-use Filament\Forms\Form;
+use Filament\Actions;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
 
@@ -13,19 +14,19 @@ class ActivityLogResource extends Resource
 {
     protected static ?string $model = null;
 
-    protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-clipboard-document-list';
 
     protected static ?string $navigationLabel = 'Activity Logs';
 
     protected static ?string $pluralLabel = 'Activity Logs';
 
-    protected static ?string $navigationGroup = 'System';
+    protected static \UnitEnum|string|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 25;
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form->schema([]);
+        return $schema;
     }
 
     public static function table(Table $table): Table
@@ -69,7 +70,7 @@ class ActivityLogResource extends Resource
                     ]),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
+                Actions\ViewAction::make(),
             ])
             ->poll(null)
             ->deferLoading();

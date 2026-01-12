@@ -4,8 +4,8 @@ namespace App\Filament\Auth;
 
 use App\Repositories\AdminRepository;
 use Filament\Forms\Components\TextInput;
-use Filament\Http\Responses\Auth\Contracts\LoginResponse;
-use Filament\Pages\Auth\Login;
+use Filament\Auth\Http\Responses\Contracts\LoginResponse;
+use Filament\Auth\Pages\Login;
 use Illuminate\Validation\ValidationException;
 
 class AdminLogin extends Login

@@ -9,13 +9,13 @@ use Filament\Notifications\Notification;
 
 class SystemHealth extends Page
 {
-    protected static ?string $navigationIcon = 'heroicon-o-heart';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-heart';
 
-    protected static string $view = 'filament.pages.system-health';
+    protected string $view = 'filament.pages.system-health';
 
     protected static ?string $navigationLabel = 'System Health';
 
-    protected static ?string $navigationGroup = 'System';
+    protected static \UnitEnum|string|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 31;
 

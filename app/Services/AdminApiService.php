@@ -388,26 +388,111 @@ class AdminApiService extends BaseApiService
 
     /**
      * Refresh admin token
+     * Uses postWithoutToken to avoid recursive 401 handling
      */
     public function refreshToken(): AdminAuthResponse
     {
         try {
-            $response = $this->post('/auth/refresh', []);
+            // Use postWithoutToken to avoid triggering handleUnauthorized recursively
+            // But we still need to include the current token for refresh
+            $startTime = microtime(true);
+            $fullUrl = $this->baseUrl . '/auth/refresh';
             
-            $authResponse = AdminAuthResponse::fromApiResponse([
-                'data' => $response->data,
-                'success' => $response->success,
-                'message' => $response->message,
+            Log::info("API Request: POST {$fullUrl} (token refresh)", [
+                'service' => $this->getServiceName(),
+                'endpoint' => '/auth/refresh',
             ]);
 
-            // Update stored token
-            if ($authResponse->isSuccess() && $authResponse->getToken()) {
-                $this->storeToken($authResponse->getToken(), $authResponse->getExpiresAt());
+            $token = $this->getToken();
+            if (!$token) {
+                Log::warning("Token refresh attempted but no token available");
+                $this->clearToken();
+                return AdminAuthResponse::failure("No token available to refresh");
             }
 
-            return $authResponse;
-        } catch (ApiException $e) {
-            // Clear token on refresh failure
+            $client = Http::withHeaders([
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+                'Authorization' => 'Bearer ' . $token,
+            ])->timeout($this->timeout);
+            
+            // Disable SSL verification in development if configured
+            $verifySsl = config('services.admin_api.verify_ssl', true);
+            $envVerifySsl = env('ADMIN_API_VERIFY_SSL', 'true');
+            
+            if ($verifySsl === false || $verifySsl === 'false' || 
+                ($envVerifySsl !== null && ($envVerifySsl === false || $envVerifySsl === 'false'))) {
+                $client = $client->withoutVerifying();
+            }
+            
+            $response = $client->post($fullUrl, []);
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $statusCode = $response->status();
+
+            if ($response->successful()) {
+                $this->circuitBreaker->recordSuccess();
+                $responseData = $response->json();
+                
+                $data = [];
+                $success = true;
+                $message = null;
+                
+                $success = $responseData['success'] ?? true;
+                $message = $responseData['message'] ?? null;
+                
+                if (isset($responseData['data'])) {
+                    $data = is_array($responseData['data']) ? $responseData['data'] : ['value' => $responseData['data']];
+                } elseif (isset($responseData['token']) || isset($responseData['user'])) {
+                    if (isset($responseData['token'])) $data['token'] = $responseData['token'];
+                    if (isset($responseData['token_type'])) $data['token_type'] = $responseData['token_type'];
+                    if (isset($responseData['expires_at'])) $data['expires_at'] = $responseData['expires_at'];
+                    if (isset($responseData['expires_in'])) $data['expires_at'] = now()->addSeconds($responseData['expires_in'])->toIso8601String();
+                    if (isset($responseData['user'])) $data['user'] = $responseData['user'];
+                } else {
+                    $data = $responseData;
+                    unset($data['success'], $data['message'], $data['meta'], $data['status'], $data['code']);
+                }
+                
+                $authResponse = AdminAuthResponse::fromApiResponse([
+                    'data' => $data,
+                    'success' => $success,
+                    'message' => $message,
+                ]);
+
+                // Update stored token
+                if ($authResponse->isSuccess() && $authResponse->getToken()) {
+                    $this->storeToken($authResponse->getToken(), $authResponse->getExpiresAt());
+                    Log::info("Token refreshed successfully", [
+                        'service' => $this->getServiceName(),
+                        'duration_ms' => $duration,
+                    ]);
+                }
+
+                return $authResponse;
+            }
+
+            // Refresh failed
+            $this->circuitBreaker->recordSuccess(); // 401/403 on refresh is not a service failure
+            $responseData = $response->json() ?? [];
+            $errorMessage = $responseData['message'] ?? "Token refresh failed with status {$statusCode}";
+            
+            Log::warning("Token refresh failed", [
+                'service' => $this->getServiceName(),
+                'status_code' => $statusCode,
+                'duration_ms' => $duration,
+                'message' => $errorMessage,
+            ]);
+            
+            $this->clearToken();
+            return AdminAuthResponse::failure($errorMessage);
+            
+        } catch (\Exception $e) {
+            // Clear token on any exception during refresh
+            Log::error("Token refresh exception", [
+                'service' => $this->getServiceName(),
+                'error' => $e->getMessage(),
+                'exception_type' => get_class($e),
+            ]);
             $this->clearToken();
             return AdminAuthResponse::failure($e->getMessage());
         }
@@ -438,5 +523,55 @@ class AdminApiService extends BaseApiService
         }
 
         return $client;
+    }
+
+    /**
+     * Handle unauthorized (401) response by logging out the user
+     */
+    protected function handleUnauthorized(string $endpoint, array $responseData = []): bool
+    {
+        // Don't logout on auth endpoints
+        if (str_contains($endpoint, '/auth/login') || str_contains($endpoint, '/auth/refresh')) {
+            return false;
+        }
+
+        Log::warning("API Unauthorized: Logging out user due to 401 error", [
+            'service' => $this->getServiceName(),
+            'endpoint' => $endpoint,
+        ]);
+
+        $this->logoutUser();
+        return false;
+    }
+
+    /**
+     * Logout the user and clear all authentication data
+     * Made public so other services can call it
+     */
+    public function logoutUser(): void
+    {
+        try {
+            // Clear token
+            $this->clearToken();
+            
+            // Clear admin user from session
+            Session::forget('admin_user');
+            
+            // Logout Filament user if authenticated
+            if (\Illuminate\Support\Facades\Auth::check()) {
+                \Illuminate\Support\Facades\Auth::logout();
+                Session::invalidate();
+                Session::regenerateToken();
+            }
+            
+            Log::info("User logged out due to authentication failure", [
+                'service' => $this->getServiceName(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Error during user logout", [
+                'service' => $this->getServiceName(),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

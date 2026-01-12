@@ -4,8 +4,9 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\BackupResource\Pages;
 use App\Repositories\AdminRepository;
+use Filament\Actions;
 use Filament\Forms;
-use Filament\Forms\Form;
+use Filament\Schemas\Schema;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -15,20 +16,19 @@ class BackupResource extends Resource
 {
     protected static ?string $model = null;
 
-    protected static ?string $navigationIcon = 'heroicon-o-server-stack';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-server-stack';
 
     protected static ?string $navigationLabel = 'Backups';
 
     protected static ?string $pluralLabel = 'Backups';
 
-    protected static ?string $navigationGroup = 'System';
+    protected static \UnitEnum|string|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 20;
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form
-            ->schema([
+        return $schema->components([
                 Forms\Components\Section::make('Backup Information')
                     ->schema([
                         Forms\Components\TextInput::make('filename')
@@ -90,8 +90,8 @@ class BackupResource extends Resource
                     ]),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\Action::make('download')
+                Actions\ViewAction::make(),
+                Actions\Action::make('download')
                     ->label('Download')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->action(function ($record) {
@@ -111,7 +111,7 @@ class BackupResource extends Resource
                                 ->send();
                         }
                     }),
-                Tables\Actions\Action::make('import')
+                Actions\Action::make('import')
                     ->label('Import')
                     ->icon('heroicon-o-arrow-up-tray')
                     ->color('warning')
@@ -144,7 +144,7 @@ class BackupResource extends Resource
                                 ->send();
                         }
                     }),
-                Tables\Actions\DeleteAction::make()
+                Actions\DeleteAction::make()
                     ->requiresConfirmation()
                     ->action(function ($record) {
                         $repository = app(AdminRepository::class);
