@@ -141,8 +141,14 @@ class AdminLogin extends Login
             ]);
 
             $errorMessage = 'Unable to connect to the Admin API. Please check your configuration or try again later.';
-            
-            if ($e instanceof \App\Exceptions\ApiConnectionException) {
+
+            // Detect API database schema error (e.g. missing users.deleted_at on host)
+            $ctx = $e->getContext() ?? [];
+            $body = (string) ($ctx['body'] ?? '');
+            $debug = (string) ($ctx['response_data']['debug'] ?? '');
+            if (str_contains($body, 'deleted_at') || str_contains($debug, 'deleted_at')) {
+                $errorMessage = 'The Admin API database is missing the users.deleted_at column. On the API backend, add a migration with $table->softDeletes() on the users table and run php artisan migrate.';
+            } elseif ($e instanceof \App\Exceptions\ApiConnectionException) {
                 $errorMessage = 'Connection failed. Please check if the Admin API is accessible. Verify ADMIN_API_BASE_URL is correct.';
             } elseif ($e instanceof \App\Exceptions\ApiTimeoutException) {
                 $errorMessage = 'Request timed out. Please try again.';
