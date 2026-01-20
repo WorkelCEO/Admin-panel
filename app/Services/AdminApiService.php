@@ -156,9 +156,19 @@ class AdminApiService extends BaseApiService
             ]);
 
             $message = $e->getMessage();
-            // Use API validation errors when available (e.g. 422 "The selected email is invalid.")
-            if ($e->getCode() === 422) {
-                $errors = $e->getContext()['response_data']['errors'] ?? [];
+            $ctx = $e->getContext() ?? [];
+
+            // 500: detect missing users.deleted_at on the API database
+            if ($e->getCode() === 500) {
+                $body = (string) ($ctx['body'] ?? '');
+                $debug = (string) ($ctx['response_data']['debug'] ?? '');
+                if (str_contains($body, 'deleted_at') || str_contains($debug, 'deleted_at')) {
+                    $message = 'The Admin API database is missing the users.deleted_at column. On the API backend, add a migration with $table->softDeletes() on the users table and run php artisan migrate.';
+                }
+            }
+            // 422: use API validation errors (e.g. "The selected email is invalid.")
+            elseif ($e->getCode() === 422) {
+                $errors = $ctx['response_data']['errors'] ?? [];
                 $message = $errors['email'][0] ?? $errors['password'][0] ?? null;
                 if ($message === null && !empty($errors)) {
                     $first = reset($errors);

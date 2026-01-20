@@ -1,0 +1,11 @@
+> node --max-old-space-size=8192 node_modules/vite/bin/vite.js build
+
+vite v5.4.8 building for production...
+transforming (1) resources/js/app.jsBrowserslist: caniuse-lite is outdated. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+✓ 54 modules transformed.
+public/build/manifest.json                             0.45 kB │ gzip:  0.18 kB
+public/build/assets/app-BcB4pxyS.css                  37.14 kB │ gzip:  7.26 kB
+public/build/assets/tailwind-utilities-ZR_MtEUy.css  599.61 kB │ gzip: 63.78 kB
+public/build/assets/app-z-Rg4TxU.js                   35.05 kB │ gzip: 14.06 kB
