@@ -154,8 +154,20 @@ class AdminApiService extends BaseApiService
                 'endpoint' => $e->getEndpoint(),
                 'context' => $e->getContext(),
             ]);
-            
-            return AdminAuthResponse::failure($e->getMessage());
+
+            $message = $e->getMessage();
+            // Use API validation errors when available (e.g. 422 "The selected email is invalid.")
+            if ($e->getCode() === 422) {
+                $errors = $e->getContext()['response_data']['errors'] ?? [];
+                $message = $errors['email'][0] ?? $errors['password'][0] ?? null;
+                if ($message === null && !empty($errors)) {
+                    $first = reset($errors);
+                    $message = is_array($first) ? ($first[0] ?? $message) : $first;
+                }
+                $message = $message ?? $e->getMessage();
+            }
+
+            return AdminAuthResponse::failure($message);
         }
     }
 
