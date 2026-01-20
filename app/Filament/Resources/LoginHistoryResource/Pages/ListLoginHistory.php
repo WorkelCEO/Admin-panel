@@ -18,6 +18,13 @@ class ListLoginHistory extends ListRecords
 
     public array $filterData = [];
 
+    protected function configureTable(\Filament\Tables\Table $table): \Filament\Tables\Table
+    {
+        return parent::configureTable($table)
+            ->recordAction(null)
+            ->recordUrl(null);
+    }
+
     protected function getHeaderActions(): array
     {
         return [

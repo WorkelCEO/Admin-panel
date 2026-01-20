@@ -215,27 +215,13 @@ class LoginHistoryResource extends Resource
                     ]),
             ])
             ->actions([
-                Actions\ViewAction::make()
-                    ->url(function ($record) {
-                        // Get record data as array
-                        $recordData = is_object($record) && method_exists($record, 'getAttributes') 
-                            ? $record->getAttributes() 
-                            : (is_object($record) ? (array) $record : $record);
-                        
-                        // Use a unique identifier for the record
-                        $recordId = $recordData['id'] ?? $recordData['user_id'] ?? md5(json_encode($recordData));
-                        
-                        return static::getUrl('view', [
-                            'record' => base64_encode(json_encode([
-                                'id' => $recordId,
-                                'data' => $recordData,
-                            ]))
-                        ]);
-                    }),
+                // No actions - login history is read-only
             ])
             ->bulkActions([
                 // No bulk actions for login history
             ])
+            ->recordAction(null) // Disable row click to prevent navigation to edit page
+            ->recordUrl(null) // Disable row URL to prevent navigation
             ->poll(null)
             ->deferLoading();
     }
@@ -256,6 +242,11 @@ class LoginHistoryResource extends Resource
     }
 
     public static function canCreate(): bool
+    {
+        return false; // Login history is read-only
+    }
+
+    public static function canEdit($record): bool
     {
         return false; // Login history is read-only
     }

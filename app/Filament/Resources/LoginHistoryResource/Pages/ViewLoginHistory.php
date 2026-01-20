@@ -17,6 +17,11 @@ class ViewLoginHistory extends ViewRecord
             // Read-only view, no actions
         ];
     }
+
+    public static function canEdit($record): bool
+    {
+        return false; // Login history is read-only
+    }
     
     protected function mutateFormDataBeforeFill(array $data): array
     {
