@@ -158,12 +158,31 @@ class AdminApiService extends BaseApiService
             $message = $e->getMessage();
             $ctx = $e->getContext() ?? [];
 
-            // 500: detect missing users.deleted_at on the API database
+            // 500: detect database configuration errors on the API
             if ($e->getCode() === 500) {
                 $body = (string) ($ctx['body'] ?? '');
-                $debug = (string) ($ctx['response_data']['debug'] ?? '');
-                if (str_contains($body, 'deleted_at') || str_contains($debug, 'deleted_at')) {
+                $responseData = $ctx['response_data'] ?? [];
+                $debug = (string) ($responseData['debug'] ?? '');
+                $apiErrorMessage = (string) ($responseData['message'] ?? $body);
+                $exceptionMessage = (string) $e->getMessage();
+                
+                // Combine all possible error message sources for detection
+                $combinedMessage = $exceptionMessage . ' ' . $apiErrorMessage . ' ' . $body;
+                
+                // Detect SQLite database path configuration error
+                if (str_contains($combinedMessage, 'Database file at path') && 
+                    (str_contains($combinedMessage, 'does not exist') || str_contains($combinedMessage, 'Ensure this is an absolute path'))) {
+                    $message = 'The Admin API database configuration is incorrect. The SQLite database path is invalid. Please check the DB_DATABASE setting in the API server\'s .env file and ensure it contains an absolute path to the database file (e.g., /path/to/database.sqlite).';
+                }
+                // Detect missing users.deleted_at column
+                elseif (str_contains($combinedMessage, 'deleted_at')) {
                     $message = 'The Admin API database is missing the users.deleted_at column. On the API backend, add a migration with $table->softDeletes() on the users table and run php artisan migrate.';
+                }
+                // Detect other database connection errors
+                elseif (str_contains($combinedMessage, 'SQLSTATE') || 
+                        str_contains($combinedMessage, 'Connection') || 
+                        (str_contains($combinedMessage, 'database') && str_contains($combinedMessage, 'does not exist'))) {
+                    $message = 'The Admin API database connection failed. Please check the database configuration on the API server (DB_CONNECTION, DB_DATABASE, DB_HOST, etc. in .env file).';
                 }
             }
             // 422: use API validation errors (e.g. "The selected email is invalid.")
