@@ -553,7 +553,7 @@ class AdminApiService extends BaseApiService
     protected function handleUnauthorized(string $endpoint, array $responseData = []): bool
     {
         // Don't logout on auth endpoints
-        if (str_contains($endpoint, '/auth/login') || str_contains($endpoint, '/auth/refresh')) {
+        if (str_contains($endpoint, '/auth/login') || str_contains($endpoint, '/auth/refresh') || str_contains($endpoint, '/auth/logout')) {
             return false;
         }
 
