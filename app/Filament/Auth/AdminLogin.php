@@ -168,6 +168,20 @@ class AdminLogin extends Login
                     (str_contains($combinedMessage, 'database') && str_contains($combinedMessage, 'does not exist'))) {
                 $errorMessage = 'The Admin API database connection failed. Please check the database configuration on the API server (DB_CONNECTION, DB_DATABASE, DB_HOST, etc. in .env file).';
             }
+            // Handle 403 Forbidden (insufficient permissions)
+            elseif ($e->getCode() === 403) {
+                $responseData = $ctx['response_data'] ?? [];
+                $errorData = $responseData['data'] ?? [];
+                $currentRole = $errorData['current_role'] ?? 'unknown';
+                $requiredRoles = $errorData['required_roles'] ?? [];
+                
+                if (!empty($requiredRoles)) {
+                    $rolesList = implode(' or ', $requiredRoles);
+                    $errorMessage = "Access denied. Your account has the '{$currentRole}' role, but you need {$rolesList} privileges to access the admin panel. Please contact an administrator to upgrade your account.";
+                } else {
+                    $errorMessage = $responseData['message'] ?? $e->getMessage();
+                }
+            }
             elseif ($e instanceof \App\Exceptions\ApiConnectionException) {
                 $errorMessage = 'Connection failed. Please check if the Admin API is accessible. Verify ADMIN_API_BASE_URL is correct.';
             } elseif ($e instanceof \App\Exceptions\ApiTimeoutException) {

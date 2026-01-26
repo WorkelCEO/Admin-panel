@@ -95,6 +95,20 @@ class AdminApiService extends BaseApiService
         }
 
         try {
+            // Log the exact data being sent (sanitize password)
+            $logData = $data;
+            if (isset($logData['password'])) {
+                $logData['password'] = '***REDACTED***';
+            }
+            \Illuminate\Support\Facades\Log::debug('Admin login request data', [
+                'email' => $email,
+                'has_password' => !empty($data['password']),
+                'password_length' => strlen($data['password'] ?? ''),
+                'device_name' => $deviceName,
+                'data_keys' => array_keys($data),
+                'sanitized_data' => $logData,
+            ]);
+            
             // Don't use token for login endpoint
             $response = $this->postWithoutToken('/auth/login', $data);
             
@@ -185,6 +199,20 @@ class AdminApiService extends BaseApiService
                     $message = 'The Admin API database connection failed. Please check the database configuration on the API server (DB_CONNECTION, DB_DATABASE, DB_HOST, etc. in .env file).';
                 }
             }
+            // 403: handle insufficient permissions
+            elseif ($e->getCode() === 403) {
+                $responseData = $ctx['response_data'] ?? [];
+                $errorData = $responseData['data'] ?? [];
+                $currentRole = $errorData['current_role'] ?? 'unknown';
+                $requiredRoles = $errorData['required_roles'] ?? [];
+                
+                if (!empty($requiredRoles)) {
+                    $rolesList = implode(' or ', $requiredRoles);
+                    $message = "Access denied. Your account has the '{$currentRole}' role, but you need {$rolesList} privileges to access the admin panel. Please contact an administrator to upgrade your account.";
+                } else {
+                    $message = $responseData['message'] ?? $e->getMessage();
+                }
+            }
             // 422: use API validation errors (e.g. "The selected email is invalid.")
             elseif ($e->getCode() === 422) {
                 $errors = $ctx['response_data']['errors'] ?? [];
@@ -235,10 +263,37 @@ class AdminApiService extends BaseApiService
         }
 
         try {
-            $client = Http::withHeaders([
+            // Add headers that might be required by the API
+            $headers = [
                 'Accept' => 'application/json',
                 'Content-Type' => 'application/json',
-            ])->timeout($this->timeout);
+            ];
+            
+            // Add User-Agent to match browser requests (some APIs check this)
+            if (request()->hasHeader('User-Agent')) {
+                $headers['User-Agent'] = request()->header('User-Agent');
+            } else {
+                $headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36';
+            }
+            
+            // Add Origin header if available (some APIs check this)
+            if (request()->hasHeader('Origin')) {
+                $headers['Origin'] = request()->header('Origin');
+            } elseif (config('app.url')) {
+                $headers['Origin'] = config('app.url');
+            }
+            
+            // Add Referer header if available
+            if (request()->hasHeader('Referer')) {
+                $headers['Referer'] = request()->header('Referer');
+            }
+            
+            Log::debug("Login request headers", [
+                'headers' => $headers,
+                'full_url' => $fullUrl,
+            ]);
+            
+            $client = Http::withHeaders($headers)->timeout($this->timeout);
             
             // Disable SSL verification in development if configured
             $verifySsl = config('services.admin_api.verify_ssl', true);
