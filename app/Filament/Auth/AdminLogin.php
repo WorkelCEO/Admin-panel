@@ -125,64 +125,14 @@ class AdminLogin extends Login
                 'endpoint' => $e->getEndpoint(),
                 'context' => $e->getContext(),
                 'exception_type' => get_class($e),
-                'environment' => [
-                    'app_env' => config('app.env'),
-                    'app_url' => config('app.url'),
-                    'is_https' => request()->secure(),
-                    'admin_api_base_url' => config('services.admin_api.base_url'),
-                    'admin_api_verify_ssl' => config('services.admin_api.verify_ssl'),
-                ],
-                'session_config' => [
-                    'driver' => config('session.driver'),
-                    'secure' => config('session.secure'),
-                    'same_site' => config('session.same_site'),
-                    'domain' => config('session.domain'),
-                ],
             ]);
 
-            $errorMessage = 'Unable to connect to the Admin API. Please check your configuration or try again later.';
+            // ErrorHandler already provides user-friendly error messages
+            // Use the exception message directly
+            $errorMessage = $e->getMessage();
 
-            // Detect API database configuration errors
-            $ctx = $e->getContext() ?? [];
-            $body = (string) ($ctx['body'] ?? '');
-            $responseData = $ctx['response_data'] ?? [];
-            $debug = (string) ($responseData['debug'] ?? '');
-            $apiErrorMessage = (string) ($responseData['message'] ?? $body);
-            $exceptionMessage = (string) $e->getMessage();
-            
-            // Combine all possible error message sources for detection
-            $combinedMessage = $exceptionMessage . ' ' . $apiErrorMessage . ' ' . $body;
-            
-            // Detect SQLite database path configuration error
-            if (str_contains($combinedMessage, 'Database file at path') && 
-                (str_contains($combinedMessage, 'does not exist') || str_contains($combinedMessage, 'Ensure this is an absolute path'))) {
-                $errorMessage = 'The Admin API database configuration is incorrect. The SQLite database path is invalid. Please check the DB_DATABASE setting in the API server\'s .env file and ensure it contains an absolute path to the database file (e.g., /path/to/database.sqlite).';
-            }
-            // Detect missing users.deleted_at column
-            elseif (str_contains($combinedMessage, 'deleted_at')) {
-                $errorMessage = 'The Admin API database is missing the users.deleted_at column. On the API backend, add a migration with $table->softDeletes() on the users table and run php artisan migrate.';
-            }
-            // Detect other database connection errors
-            elseif (str_contains($combinedMessage, 'SQLSTATE') || 
-                    str_contains($combinedMessage, 'Connection') || 
-                    (str_contains($combinedMessage, 'database') && str_contains($combinedMessage, 'does not exist'))) {
-                $errorMessage = 'The Admin API database connection failed. Please check the database configuration on the API server (DB_CONNECTION, DB_DATABASE, DB_HOST, etc. in .env file).';
-            }
-            // Handle 403 Forbidden (insufficient permissions)
-            elseif ($e->getCode() === 403) {
-                $responseData = $ctx['response_data'] ?? [];
-                $errorData = $responseData['data'] ?? [];
-                $currentRole = $errorData['current_role'] ?? 'unknown';
-                $requiredRoles = $errorData['required_roles'] ?? [];
-                
-                if (!empty($requiredRoles)) {
-                    $rolesList = implode(' or ', $requiredRoles);
-                    $errorMessage = "Access denied. Your account has the '{$currentRole}' role, but you need {$rolesList} privileges to access the admin panel. Please contact an administrator to upgrade your account.";
-                } else {
-                    $errorMessage = $responseData['message'] ?? $e->getMessage();
-                }
-            }
-            elseif ($e instanceof \App\Exceptions\ApiConnectionException) {
+            // Provide fallback for connection errors
+            if ($e instanceof \App\Exceptions\ApiConnectionException) {
                 $errorMessage = 'Connection failed. Please check if the Admin API is accessible. Verify ADMIN_API_BASE_URL is correct.';
             } elseif ($e instanceof \App\Exceptions\ApiTimeoutException) {
                 $errorMessage = 'Request timed out. Please try again.';

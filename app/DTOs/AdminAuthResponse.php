@@ -4,72 +4,63 @@ namespace App\DTOs;
 
 /**
  * Admin authentication response DTO
+ * 
+ * Matches API documentation structure:
+ * {
+ *   "success": true,
+ *   "message": "Admin login successful.",
+ *   "data": {
+ *     "user": {...},
+ *     "token": "...",
+ *     "token_type": "Bearer",
+ *     "expires_at": "..."
+ *   }
+ * }
  */
 class AdminAuthResponse extends ApiResponse
 {
+    /**
+     * Get user data from response
+     * ResponseParser ensures data.user is available
+     */
     public function getUser(): ?array
     {
-        if (is_array($this->data)) {
-            // Standard location: data.user
-            if (isset($this->data['user']) && is_array($this->data['user'])) {
-                return $this->data['user'];
-            }
-            // If user data is at root level, construct user object from available fields
-            if (isset($this->data['id']) || isset($this->data['email']) || isset($this->data['name'])) {
-                return [
-                    'id' => $this->data['id'] ?? null,
-                    'email' => $this->data['email'] ?? null,
-                    'name' => $this->data['name'] ?? null,
-                    'system_role' => $this->data['system_role'] ?? $this->data['role'] ?? null,
-                    'is_super_admin' => $this->data['is_super_admin'] ?? false,
-                ];
-            }
+        if (is_array($this->data) && isset($this->data['user']) && is_array($this->data['user'])) {
+            return $this->data['user'];
         }
         return null;
     }
 
+    /**
+     * Get authentication token
+     * ResponseParser ensures data.token is available
+     */
     public function getToken(): ?string
     {
-        // Check multiple possible token locations
-        if (is_array($this->data)) {
-            // Standard location: data.token
-            if (isset($this->data['token']) && is_string($this->data['token'])) {
-                return $this->data['token'];
-            }
-            // Alternative locations
-            if (isset($this->data['access_token']) && is_string($this->data['access_token'])) {
-                return $this->data['access_token'];
-            }
-            if (isset($this->data['auth']['token']) && is_string($this->data['auth']['token'])) {
-                return $this->data['auth']['token'];
-            }
-            if (isset($this->data['user']['token']) && is_string($this->data['user']['token'])) {
-                return $this->data['user']['token'];
-            }
+        if (is_array($this->data) && isset($this->data['token']) && is_string($this->data['token'])) {
+            return $this->data['token'];
         }
         return null;
     }
 
+    /**
+     * Get token type (defaults to Bearer)
+     */
     public function getTokenType(): string
     {
         return $this->data['token_type'] ?? 'Bearer';
     }
 
+    /**
+     * Get token expiration time
+     * ResponseParser handles expires_in conversion to expires_at
+     */
     public function getExpiresAt(): ?string
     {
-        if (is_array($this->data)) {
-            // Standard location: data.expires_at
-            if (isset($this->data['expires_at'])) {
-                return is_string($this->data['expires_at']) ? $this->data['expires_at'] : (string) $this->data['expires_at'];
-            }
-            // Alternative: expires_in (convert to expires_at)
-            if (isset($this->data['expires_in']) && is_numeric($this->data['expires_in'])) {
-                return now()->addSeconds((int) $this->data['expires_in'])->toIso8601String();
-            }
-            // Check in auth object
-            if (isset($this->data['auth']['expires_at'])) {
-                return is_string($this->data['auth']['expires_at']) ? $this->data['auth']['expires_at'] : (string) $this->data['auth']['expires_at'];
-            }
+        if (is_array($this->data) && isset($this->data['expires_at'])) {
+            return is_string($this->data['expires_at']) 
+                ? $this->data['expires_at'] 
+                : (string) $this->data['expires_at'];
         }
         return null;
     }
