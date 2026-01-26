@@ -263,34 +263,23 @@ class AdminApiService extends BaseApiService
         }
 
         try {
-            // Add headers that might be required by the API
+            // Use minimal headers to match curl exactly (curl works, so let's match it)
             $headers = [
                 'Accept' => 'application/json',
                 'Content-Type' => 'application/json',
             ];
             
-            // Add User-Agent to match browser requests (some APIs check this)
-            if (request()->hasHeader('User-Agent')) {
-                $headers['User-Agent'] = request()->header('User-Agent');
-            } else {
-                $headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36';
-            }
-            
-            // Add Origin header if available (some APIs check this)
-            if (request()->hasHeader('Origin')) {
-                $headers['Origin'] = request()->header('Origin');
-            } elseif (config('app.url')) {
-                $headers['Origin'] = config('app.url');
-            }
-            
-            // Add Referer header if available
-            if (request()->hasHeader('Referer')) {
-                $headers['Referer'] = request()->header('Referer');
-            }
-            
             Log::debug("Login request headers", [
                 'headers' => $headers,
                 'full_url' => $fullUrl,
+            ]);
+            
+            // Log the exact JSON being sent
+            $jsonData = json_encode($data, JSON_UNESCAPED_SLASHES);
+            Log::debug("Login request JSON body", [
+                'json' => $jsonData,
+                'json_length' => strlen($jsonData),
+                'data' => $data,
             ]);
             
             $client = Http::withHeaders($headers)->timeout($this->timeout);
@@ -309,6 +298,8 @@ class AdminApiService extends BaseApiService
                 ]);
             }
             
+            // Send the request - Laravel automatically JSON encodes arrays when Content-Type is application/json
+            // This matches curl behavior exactly
             $response = $client->post($fullUrl, $data);
             $duration = round((microtime(true) - $startTime) * 1000, 2);
             $statusCode = $response->status();
