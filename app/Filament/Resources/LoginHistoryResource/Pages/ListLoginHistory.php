@@ -18,6 +18,11 @@ class ListLoginHistory extends ListRecords
 
     public array $filterData = [];
 
+    public function mount(): void
+    {
+        $this->redirect(route('filament.admin.pages.login-history'), navigate: true);
+    }
+
     protected function configureTable(\Filament\Tables\Table $table): \Filament\Tables\Table
     {
         return parent::configureTable($table)
