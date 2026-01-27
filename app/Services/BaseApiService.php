@@ -100,6 +100,32 @@ abstract class BaseApiService
     }
 
     /**
+     * Get AdminAuthContext if available (for admin services)
+     */
+    protected function getAuthContext(): ?\App\Services\Auth\AdminAuthContext
+    {
+        // Only return auth context if this is an admin service
+        // Non-admin services (EmailLogs, WorkelUser) won't have this
+        if ($this->isAdminService()) {
+            try {
+                return app(\App\Services\Auth\AdminAuthContext::class);
+            } catch (\Exception $e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Check if this is an admin service (uses admin API)
+     */
+    protected function isAdminService(): bool
+    {
+        $serviceName = $this->getServiceName();
+        return str_starts_with($serviceName, 'admin_api');
+    }
+
+    /**
      * Execute GET request with retry logic, circuit breaker, and caching
      */
     protected function get(string $endpoint, array $params = [], ?int $cacheTtl = null): ApiResponse
@@ -115,6 +141,31 @@ abstract class BaseApiService
                     'cache_key' => $cacheKey,
                 ]);
                 return $cached;
+            }
+        }
+
+        // For admin services, use AdminAuthContext for proactive token management
+        $authContext = $this->getAuthContext();
+        if ($authContext && !$this->isPublicEndpoint($endpoint)) {
+            try {
+                // Ensure authenticated and refresh token if needed
+                $authContext->ensureAuthenticated();
+            } catch (\Exception $e) {
+                Log::warning("Authentication check failed", [
+                    'service' => $this->getServiceName(),
+                    'endpoint' => $endpoint,
+                    'error' => $e->getMessage(),
+                ]);
+                
+                if (!$this->handleUnauthorized($endpoint, [])) {
+                    throw new ApiException(
+                        "Authentication token is missing. Please log in again.",
+                        401,
+                        null,
+                        $endpoint,
+                        ['status' => 401, 'requires_auth' => true, 'token_missing' => true]
+                    );
+                }
             }
         }
 
@@ -172,6 +223,25 @@ abstract class BaseApiService
      */
     protected function post(string $endpoint, array $data = [], ?string $token = null): ApiResponse
     {
+        // For admin services, ensure authentication before request
+        $authContext = $this->getAuthContext();
+        if ($authContext && !$this->isPublicEndpoint($endpoint)) {
+            try {
+                $authContext->ensureAuthenticated();
+            } catch (\Exception $e) {
+                // If ensure fails, try handleUnauthorized
+                if (!$this->handleUnauthorized($endpoint, [])) {
+                    throw new ApiException(
+                        "Authentication token is missing. Please log in again.",
+                        401,
+                        null,
+                        $endpoint,
+                        ['status' => 401, 'requires_auth' => true]
+                    );
+                }
+            }
+        }
+
         $token = $token ?? $this->getToken();
         
         // Handle 401 by attempting token refresh
@@ -208,6 +278,25 @@ abstract class BaseApiService
      */
     protected function put(string $endpoint, array $data = [], ?string $token = null): ApiResponse
     {
+        // For admin services, ensure authentication before request
+        $authContext = $this->getAuthContext();
+        if ($authContext && !$this->isPublicEndpoint($endpoint)) {
+            try {
+                $authContext->ensureAuthenticated();
+            } catch (\Exception $e) {
+                // If ensure fails, try handleUnauthorized
+                if (!$this->handleUnauthorized($endpoint, [])) {
+                    throw new ApiException(
+                        "Authentication token is missing. Please log in again.",
+                        401,
+                        null,
+                        $endpoint,
+                        ['status' => 401, 'requires_auth' => true]
+                    );
+                }
+            }
+        }
+
         $token = $token ?? $this->getToken();
         
         // Handle 401 by attempting token refresh

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\DTOs\AdminAuthResponse;
 use App\DTOs\ApiResponse;
 use App\Exceptions\ApiException;
+use App\Services\Auth\AdminAuthContext;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 
@@ -14,11 +15,13 @@ use Illuminate\Support\Facades\Session;
 class AdminApiService extends BaseApiService
 {
     private TokenManager $tokenManager;
+    private AdminAuthContext $authContext;
 
     public function __construct()
     {
         parent::__construct();
-        $this->tokenManager = new TokenManager();
+        $this->tokenManager = app(TokenManager::class);
+        $this->authContext = app(AdminAuthContext::class);
     }
 
     protected function getBaseUrl(): string
@@ -98,12 +101,15 @@ class AdminApiService extends BaseApiService
                 'message' => $response->message,
             ]);
 
-            // Store token if login successful
+            // Store token and set authenticated state if login successful
             if ($authResponse->isSuccess() && $authResponse->getToken()) {
                 $token = $authResponse->getToken();
                 $expiresAt = $authResponse->getExpiresAt();
                 
                 $this->tokenManager->store($token, $expiresAt);
+                
+                // Set authenticated state in context (syncs user data)
+                $this->authContext->setAuthenticated($authResponse);
                 
                 // Verify token was stored
                 $storedToken = $this->tokenManager->get();
@@ -111,6 +117,7 @@ class AdminApiService extends BaseApiService
                     'token_stored' => !empty($storedToken),
                     'token_match' => $storedToken === $token,
                     'expires_at' => $expiresAt,
+                    'user_synced' => $this->authContext->getUser() !== null,
                 ]);
             } else {
                 Log::warning('Admin login response missing token', [
@@ -176,13 +183,19 @@ class AdminApiService extends BaseApiService
                 'message' => $response->message,
             ]);
 
-            // Update stored token
+            // Update stored token and sync user state
             if ($authResponse->isSuccess() && $authResponse->getToken()) {
                 $this->tokenManager->store(
                     $authResponse->getToken(),
                     $authResponse->getExpiresAt()
                 );
-                Log::info("Token refreshed successfully");
+                
+                // Sync user state after token refresh
+                $this->authContext->setAuthenticated($authResponse);
+                
+                Log::info("Token refreshed successfully", [
+                    'user_synced' => $this->authContext->getUser() !== null,
+                ]);
             }
 
             return $authResponse;
@@ -221,11 +234,10 @@ class AdminApiService extends BaseApiService
             return false;
         }
 
-        // Attempt to refresh token
+        // Use AdminAuthContext to refresh token
         try {
-            $refreshResponse = $this->refreshToken();
-            if ($refreshResponse->isSuccess() && $refreshResponse->getToken()) {
-                Log::info("Token refreshed successfully, retrying request", [
+            if ($this->authContext->refreshTokenIfNeeded()) {
+                Log::info("Token refreshed successfully via context, retrying request", [
                     'endpoint' => $endpoint,
                 ]);
                 return true;
@@ -249,11 +261,8 @@ class AdminApiService extends BaseApiService
     public function logoutUser(): void
     {
         try {
-            // Clear token
-            $this->tokenManager->clear();
-            
-            // Clear admin user from session
-            Session::forget('admin_user');
+            // Use AdminAuthContext to clear all auth data
+            $this->authContext->clearAuth();
             
             // Logout Filament user if authenticated
             if (\Illuminate\Support\Facades\Auth::check()) {

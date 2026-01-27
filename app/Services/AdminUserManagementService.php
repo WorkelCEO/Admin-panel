@@ -20,7 +20,7 @@ class AdminUserManagementService extends BaseApiService
     public function __construct()
     {
         parent::__construct();
-        $this->tokenManager = new TokenManager();
+        $this->tokenManager = app(TokenManager::class);
     }
 
     protected function getBaseUrl(): string

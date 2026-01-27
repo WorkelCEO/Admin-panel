@@ -6,9 +6,6 @@ use App\DTOs\ApiResponse;
 use App\Exceptions\ApiException;
 use App\Services\Concerns\HandlesApiPagination;
 use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Session;
 
 /**
  * Admin Login History Service
@@ -16,6 +13,15 @@ use Illuminate\Support\Facades\Session;
 class AdminLoginHistoryService extends BaseApiService
 {
     use HandlesApiPagination;
+    
+    private TokenManager $tokenManager;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->tokenManager = app(TokenManager::class);
+    }
+
     protected function getBaseUrl(): string
     {
         return config('services.admin_api.base_url', env('ADMIN_API_BASE_URL', 'https://your-domain.com/api/admin'));
@@ -23,7 +29,7 @@ class AdminLoginHistoryService extends BaseApiService
 
     protected function getToken(): ?string
     {
-        return Session::get('admin_api_token') ?? Cache::get('admin_api_token');
+        return $this->tokenManager->get();
     }
 
     protected function getServiceName(): string

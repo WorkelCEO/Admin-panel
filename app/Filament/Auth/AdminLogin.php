@@ -69,6 +69,12 @@ class AdminLogin extends Login
                     ],
                 ]);
 
+                \Filament\Notifications\Notification::make()
+                    ->title('Login failed')
+                    ->body($errorMessage)
+                    ->danger()
+                    ->send();
+
                 throw ValidationException::withMessages([
                     'email' => [$errorMessage],
                 ]);
@@ -81,14 +87,17 @@ class AdminLogin extends Login
                 'token_received' => !empty($response->getToken()),
                 'token_stored' => !empty($storedToken),
                 'token_match' => $storedToken === $response->getToken(),
-                'session_has_token' => \Illuminate\Support\Facades\Session::has('admin_api_token'),
-                'cache_has_token' => \Illuminate\Support\Facades\Cache::has('admin_api_token'),
             ]);
 
-            // Store admin user info in session
-            $userData = $response->getUser();
-            if ($userData) {
-                session()->put('admin_user', $userData);
+            // AdminAuthContext already handles user state synchronization via AdminApiService
+            // Verify user state is available
+            $authContext = app(\App\Services\Auth\AdminAuthContext::class);
+            $userData = $authContext->getUser();
+            
+            if (!$userData) {
+                // If user data not synced, sync it now
+                $authContext->syncUserState();
+                $userData = $authContext->getUser();
             }
 
             // Authenticate a Laravel user for Filament
@@ -140,6 +149,12 @@ class AdminLogin extends Login
                 $errorMessage = 'Login endpoint not found. Please verify ADMIN_API_BASE_URL configuration.';
             }
 
+            \Filament\Notifications\Notification::make()
+                ->title('Login failed')
+                ->body($errorMessage)
+                ->danger()
+                ->send();
+
             throw ValidationException::withMessages([
                 'email' => [$errorMessage],
             ]);
@@ -159,8 +174,16 @@ class AdminLogin extends Login
                 ],
             ]);
 
+            $unexpectedError = 'An unexpected error occurred. Please try again or contact support.';
+
+            \Filament\Notifications\Notification::make()
+                ->title('Login failed')
+                ->body($unexpectedError)
+                ->danger()
+                ->send();
+
             throw ValidationException::withMessages([
-                'email' => ['An unexpected error occurred. Please try again or contact support.'],
+                'email' => [$unexpectedError],
             ]);
         }
     }
