@@ -53,7 +53,7 @@ class ApiHttpClient
         $this->checkCircuitBreaker($endpoint);
 
         return $this->retryHandler->execute(
-            function ($timeout) use ($fullUrl, $params, $token) {
+            function ($timeout) use ($fullUrl, $params, $token, $endpoint) {
                 $response = $this->createClient($token, $timeout)
                     ->get($fullUrl, $params);
 
@@ -75,7 +75,7 @@ class ApiHttpClient
         $this->checkCircuitBreaker($endpoint);
 
         return $this->retryHandler->execute(
-            function ($timeout) use ($fullUrl, $data, $token) {
+            function ($timeout) use ($fullUrl, $data, $token, $endpoint) {
                 $response = $this->createClient($token, $timeout)
                     ->post($fullUrl, $data);
 
@@ -97,7 +97,7 @@ class ApiHttpClient
         $this->checkCircuitBreaker($endpoint);
 
         return $this->retryHandler->execute(
-            function ($timeout) use ($fullUrl, $data, $token) {
+            function ($timeout) use ($fullUrl, $data, $token, $endpoint) {
                 $response = $this->createClient($token, $timeout)
                     ->put($fullUrl, $data);
 
