@@ -100,11 +100,18 @@ class AdminApiService extends BaseApiService
 
             // Store token if login successful
             if ($authResponse->isSuccess() && $authResponse->getToken()) {
-                $this->tokenManager->store(
-                    $authResponse->getToken(),
-                    $authResponse->getExpiresAt()
-                );
-                Log::info('Admin token stored successfully');
+                $token = $authResponse->getToken();
+                $expiresAt = $authResponse->getExpiresAt();
+                
+                $this->tokenManager->store($token, $expiresAt);
+                
+                // Verify token was stored
+                $storedToken = $this->tokenManager->get();
+                Log::info('Admin token stored successfully', [
+                    'token_stored' => !empty($storedToken),
+                    'token_match' => $storedToken === $token,
+                    'expires_at' => $expiresAt,
+                ]);
             } else {
                 Log::warning('Admin login response missing token', [
                     'success' => $authResponse->isSuccess(),

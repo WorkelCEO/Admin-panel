@@ -123,6 +123,11 @@ abstract class BaseApiService
         
         // Check if token is missing for authenticated endpoints
         if (empty($token) && !$this->isPublicEndpoint($endpoint)) {
+            Log::warning("Token missing for authenticated endpoint", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+            ]);
+            
             if (!$this->handleUnauthorized($endpoint, [])) {
                 throw new ApiException(
                     "Authentication token is missing. Please log in again.",
@@ -133,6 +138,16 @@ abstract class BaseApiService
                 );
             }
             $token = $this->getToken();
+        }
+
+        // Log token status for debugging
+        if (!$this->isPublicEndpoint($endpoint)) {
+            Log::debug("Making authenticated request", [
+                'service' => $this->getServiceName(),
+                'endpoint' => $endpoint,
+                'has_token' => !empty($token),
+                'token_preview' => $token ? substr($token, 0, 20) . '...' : null,
+            ]);
         }
 
         // Make request

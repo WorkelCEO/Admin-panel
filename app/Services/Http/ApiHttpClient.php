@@ -179,6 +179,14 @@ class ApiHttpClient
 
         if ($token) {
             $client = $client->withToken($token);
+            Log::debug("Token added to request", [
+                'service' => $this->serviceName,
+                'token_preview' => substr($token, 0, 20) . '...',
+            ]);
+        } else {
+            Log::debug("No token provided for request", [
+                'service' => $this->serviceName,
+            ]);
         }
 
         if (!$this->verifySsl) {

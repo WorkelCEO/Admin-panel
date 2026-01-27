@@ -7,8 +7,6 @@ use App\DTOs\UserResponse;
 use App\Exceptions\ApiException;
 use App\Services\Concerns\HandlesApiPagination;
 use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Session;
 
 /**
  * Admin User Management Service
@@ -16,6 +14,15 @@ use Illuminate\Support\Facades\Session;
 class AdminUserManagementService extends BaseApiService
 {
     use HandlesApiPagination;
+    
+    private TokenManager $tokenManager;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->tokenManager = new TokenManager();
+    }
+
     protected function getBaseUrl(): string
     {
         return config('services.admin_api.base_url', env('ADMIN_API_BASE_URL', 'https://your-domain.com/api/admin'));
@@ -23,7 +30,7 @@ class AdminUserManagementService extends BaseApiService
 
     protected function getToken(): ?string
     {
-        return Session::get('admin_api_token') ?? Cache::get('admin_api_token');
+        return $this->tokenManager->get();
     }
 
     protected function getServiceName(): string
@@ -197,20 +204,6 @@ class AdminUserManagementService extends BaseApiService
         }
     }
 
-    /**
-     * Override client to include admin token
-     */
-    protected function client(): PendingRequest
-    {
-        $client = parent::client();
-        
-        $token = $this->getToken();
-        if ($token) {
-            $client->withToken($token);
-        }
-
-        return $client;
-    }
 
     /**
      * Handle unauthorized (401) response by logging out the user
